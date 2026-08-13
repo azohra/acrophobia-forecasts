@@ -1,6 +1,7 @@
 minimumReleaseAgeExclude:
-  - '@azohra/meteo.briefing@0.1.0'
-  - '@azohra/meteo.core@0.1.0'
-  - '@azohra/meteo.forecast@0.1.0'
-  - '@azohra/meteo.grib@0.1.0'
-  - '@azohra/meteo.j2k@0.1.0'
+  - '@azohra/meteo.briefing'
+  - '@azohra/meteo.core'
+  - '@azohra/meteo.forecast'
+  - '@azohra/meteo.grib'
+  - '@azohra/meteo.j2k'
+  - '@azohra/meteo.station'
