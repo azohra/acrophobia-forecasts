@@ -12,6 +12,7 @@
    - p50 latency high against small mean request sizes → round-trip-bound;
      concurrency and connection reuse are the lever.
    - cpu ≈ wall → compute-bound again; the wire is no longer the story. */
+import diagnostics from "node:diagnostics_channel";
 import { writeSync } from "node:fs";
 import http from "node:http";
 import https from "node:https";
@@ -41,6 +42,12 @@ function record(host, ms, bytes, ok) {
   hosts.set(host, row);
 }
 
+/* The dataset endpoint's hostname carries the R2 account id; these lines
+   land in public Actions logs, so it prints as a label, never verbatim. */
+function redactHost(host) {
+  return host.endsWith(".r2.cloudflarestorage.com") ? "r2 dataset endpoint" : host;
+}
+
 function hostOf(argument) {
   if (typeof argument === "string") return new URL(argument).host;
   if (argument instanceof URL) return argument.host;
@@ -50,7 +57,7 @@ function hostOf(argument) {
 function wrap(module_) {
   const originalRequest = module_.request;
   module_.request = function wireTimedRequest(...args) {
-    const host = hostOf(args[0]);
+    const host = redactHost(hostOf(args[0]));
     const begunAt = performance.now();
     let settled = false;
     const settle = (bytes, ok) => {
@@ -75,6 +82,42 @@ function wrap(module_) {
 wrap(http);
 wrap(https);
 syncBuiltinESMExports();
+
+/* The NOAA builders and the published-dataset reads go through
+   globalThis.fetch (undici), which never touches node:http — undici's
+   diagnostics channels cover that half of the transport. Timing runs
+   request create → trailers (body complete), matching the node:http arm. */
+const undiciBegunAt = new WeakMap();
+const undiciBytes = new WeakMap();
+
+function settleUndici(request_, ok) {
+  const begunAt = undiciBegunAt.get(request_);
+  if (begunAt === undefined) return;
+  undiciBegunAt.delete(request_);
+  transition(-1);
+  const host = redactHost(request_.origin ? new URL(request_.origin).host : "unknown");
+  record(host, performance.now() - begunAt, ok ? (undiciBytes.get(request_) ?? 0) : 0, ok);
+}
+
+diagnostics.subscribe("undici:request:create", ({ request: request_ }) => {
+  undiciBegunAt.set(request_, performance.now());
+  transition(1);
+});
+diagnostics.subscribe("undici:request:headers", ({ request: request_, response }) => {
+  const raw = response.headers;
+  for (let index = 0; index + 1 < raw.length; index += 2) {
+    if (String(raw[index]).toLowerCase() === "content-length") {
+      undiciBytes.set(request_, Number(String(raw[index + 1])) || 0);
+      break;
+    }
+  }
+});
+diagnostics.subscribe("undici:request:trailers", ({ request: request_ }) => {
+  settleUndici(request_, true);
+});
+diagnostics.subscribe("undici:request:error", ({ request: request_ }) => {
+  settleUndici(request_, false);
+});
 
 function quantile(sorted, q) {
   return sorted[Math.min(sorted.length - 1, Math.floor(q * sorted.length))];
