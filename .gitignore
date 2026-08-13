@@ -1,0 +1,4 @@
+node_modules/
+data/
+models.json
+.DS_Store

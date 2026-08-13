@@ -1,0 +1,71 @@
+# Publishes the three dataset catalogues — models.json (emitted by the
+# pinned engine, so an engine upgrade that changes the model catalogue
+# republishes it via the lockfile path filter), sites.json, and
+# site-context.json — to the private dataset bucket's root.
+#
+# Catalogues publish only from here, only from main, in one concurrency
+# group: this structurally replaces the source pipeline's catalogue-epoch
+# race guard, which existed because catalogues rode along on racing
+# per-model upload jobs. Model uploads (build-data.yml) never touch them.
+#
+# The engine @azohra/meteo.forecast is published on npmjs.com under the
+# @azohra scope and pinned in package.json — the engine guard step fails
+# fast if it is ever missing. Repository configuration: README.md.
+name: Publish catalogues
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "catalog/**"
+      - "pnpm-lock.yaml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-catalogues
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # R2's S3-compatible API; the checksum settings are Cloudflare's
+    # documented requirement for aws CLI >= 2.23 against R2.
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      AWS_DEFAULT_REGION: auto
+      AWS_REQUEST_CHECKSUM_CALCULATION: when_required
+      AWS_RESPONSE_CHECKSUM_VALIDATION: when_required
+      R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+      METEO_R2_BUCKET: ${{ vars.METEO_R2_BUCKET }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Enable pnpm from the workspace pin
+        run: corepack enable
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+      # Without the local install, npx would fall back to fetching a
+      # registry package named "meteo" — never publish anything but the
+      # pinned engine's catalogue.
+      - name: Refuse to run without the pinned engine
+        run: test -e node_modules/.bin/meteo || { echo "::error::@azohra/meteo.forecast is not installed — refusing to fall back to an unrelated registry package named meteo (README.md)"; exit 1; }
+      - name: Emit the engine's model catalogue
+        run: pnpm exec meteo forecast catalogue --output models.json
+      # The three catalogues publish as a set: consumers hold them coherent
+      # with each other. Everything that changes with the next run rides a
+      # short TTL.
+      - name: Publish the catalogues
+        run: |
+          for object in models.json:models.json catalog/sites.json:sites.json catalog/site-context.json:site-context.json; do
+            aws s3 cp "${object%%:*}" "s3://${METEO_R2_BUCKET}/${object##*:}" \
+              --endpoint-url "$R2_ENDPOINT" \
+              --cache-control "public, max-age=300" --content-type application/json
+          done
