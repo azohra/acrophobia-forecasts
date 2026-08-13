@@ -71,6 +71,11 @@ jobs:
       AWS_RESPONSE_CHECKSUM_VALIDATION: when_required
       R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
       METEO_R2_BUCKET: ${{ vars.METEO_R2_BUCKET }}
+      # Each build step preloads the wire instrumentation (applied per step
+      # so pnpm/corepack noise stays out of it); it prints one [wire] block
+      # per build — busy time, concurrency, latency, throughput, cpu — the
+      # evidence for any future transport tuning.
+      WIRE_INSTRUMENT: --import ${{ github.workspace }}/.github/scripts/wire-instrument.mjs
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Enable pnpm from the workspace pin
@@ -93,29 +98,29 @@ jobs:
       # freshest observations publish before the heavier forecast
       # builders start.
       - name: Build GOES-18 DSR observations (failure must not block the others)
-        run: pnpm exec meteo forecast build --model goes18-dsr --sites catalog/sites.json --output data || echo "::warning::GOES-18 DSR build failed"
+        run: NODE_OPTIONS="$WIRE_INSTRUMENT" pnpm exec meteo forecast build --model goes18-dsr --sites catalog/sites.json --output data || echo "::warning::GOES-18 DSR build failed"
       - name: Publish GOES-18 DSR
         run: .github/scripts/upload-data.sh goes18-dsr
       - name: Build GOES-18 AOD observations (failure must not block the others)
-        run: pnpm exec meteo forecast build --model goes18-aod --sites catalog/sites.json --output data || echo "::warning::GOES-18 AOD build failed"
+        run: NODE_OPTIONS="$WIRE_INSTRUMENT" pnpm exec meteo forecast build --model goes18-aod --sites catalog/sites.json --output data || echo "::warning::GOES-18 AOD build failed"
       - name: Publish GOES-18 AOD
         run: .github/scripts/upload-data.sh goes18-aod
       - name: Build HRRR 3 km (failure must not block the others)
-        run: pnpm exec meteo forecast build --model hrrr-conus --sites catalog/sites.json --output data || echo "::warning::HRRR build failed"
+        run: NODE_OPTIONS="$WIRE_INSTRUMENT" pnpm exec meteo forecast build --model hrrr-conus --sites catalog/sites.json --output data || echo "::warning::HRRR build failed"
       - name: Publish HRRR
         run: .github/scripts/upload-data.sh hrrr-conus
       - name: Build GFS 25 km (failure must not block the others)
-        run: pnpm exec meteo forecast build --model gfs --sites catalog/sites.json --output data || echo "::warning::GFS build failed"
+        run: NODE_OPTIONS="$WIRE_INSTRUMENT" pnpm exec meteo forecast build --model gfs --sites catalog/sites.json --output data || echo "::warning::GFS build failed"
       - name: Publish GFS
         run: .github/scripts/upload-data.sh gfs
       - name: Build NAM 12 km (failure must not block the others)
-        run: pnpm exec meteo forecast build --model nam --sites catalog/sites.json --output data || echo "::warning::NAM 12 km build failed"
+        run: NODE_OPTIONS="$WIRE_INSTRUMENT" pnpm exec meteo forecast build --model nam --sites catalog/sites.json --output data || echo "::warning::NAM 12 km build failed"
       - name: Publish NAM 12 km
         run: .github/scripts/upload-data.sh nam
       # The nest moves the most NOAA bytes, so it goes last — a timeout here
       # costs only this model's run, and the others have already uploaded.
       - name: Build NAM CONUS nest 3 km (failure must not block the others)
-        run: pnpm exec meteo forecast build --model nam-conus-nest --sites catalog/sites.json --output data || echo "::warning::NAM nest build failed"
+        run: NODE_OPTIONS="$WIRE_INSTRUMENT" pnpm exec meteo forecast build --model nam-conus-nest --sites catalog/sites.json --output data || echo "::warning::NAM nest build failed"
       - name: Publish NAM CONUS nest
         run: .github/scripts/upload-data.sh nam-conus-nest
 
@@ -140,6 +145,11 @@ jobs:
       AWS_RESPONSE_CHECKSUM_VALIDATION: when_required
       R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
       METEO_R2_BUCKET: ${{ vars.METEO_R2_BUCKET }}
+      # Each build step preloads the wire instrumentation (applied per step
+      # so pnpm/corepack noise stays out of it); it prints one [wire] block
+      # per build — busy time, concurrency, latency, throughput, cpu — the
+      # evidence for any future transport tuning.
+      WIRE_INSTRUMENT: --import ${{ github.workspace }}/.github/scripts/wire-instrument.mjs
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Enable pnpm from the workspace pin
@@ -154,19 +164,19 @@ jobs:
       # Lightest first so data appears early; each model uploads as soon as
       # it finishes (see the noaa job).
       - name: Build HRDPS 1 km (experimental feed; dd.alpha-only)
-        run: pnpm exec meteo forecast build --model hrdps-west --sites catalog/sites.json --output data || echo "::warning::1 km build failed"
+        run: NODE_OPTIONS="$WIRE_INSTRUMENT" pnpm exec meteo forecast build --model hrdps-west --sites catalog/sites.json --output data || echo "::warning::1 km build failed"
       - name: Publish HRDPS 1 km
         run: .github/scripts/upload-data.sh hrdps-west
       - name: Build RDPS 10 km (failure must not block the others)
-        run: pnpm exec meteo forecast build --model rdps --sites catalog/sites.json --output data || echo "::warning::RDPS build failed"
+        run: NODE_OPTIONS="$WIRE_INSTRUMENT" pnpm exec meteo forecast build --model rdps --sites catalog/sites.json --output data || echo "::warning::RDPS build failed"
       - name: Publish RDPS
         run: .github/scripts/upload-data.sh rdps
       - name: Build GDPS 15 km (failure must not block the others)
-        run: pnpm exec meteo forecast build --model gdps --sites catalog/sites.json --output data || echo "::warning::GDPS build failed"
+        run: NODE_OPTIONS="$WIRE_INSTRUMENT" pnpm exec meteo forecast build --model gdps --sites catalog/sites.json --output data || echo "::warning::GDPS build failed"
       - name: Publish GDPS
         run: .github/scripts/upload-data.sh gdps
       - name: Build REPS 10 km ensemble (failure must not block the others)
-        run: pnpm exec meteo forecast build --model reps --sites catalog/sites.json --output data || echo "::warning::REPS build failed"
+        run: NODE_OPTIONS="$WIRE_INSTRUMENT" pnpm exec meteo forecast build --model reps --sites catalog/sites.json --output data || echo "::warning::REPS build failed"
       - name: Publish REPS
         run: .github/scripts/upload-data.sh reps
 
@@ -188,6 +198,11 @@ jobs:
       AWS_RESPONSE_CHECKSUM_VALIDATION: when_required
       R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
       METEO_R2_BUCKET: ${{ vars.METEO_R2_BUCKET }}
+      # Each build step preloads the wire instrumentation (applied per step
+      # so pnpm/corepack noise stays out of it); it prints one [wire] block
+      # per build — busy time, concurrency, latency, throughput, cpu — the
+      # evidence for any future transport tuning.
+      WIRE_INSTRUMENT: --import ${{ github.workspace }}/.github/scripts/wire-instrument.mjs
       METEO_DATAMART_BASE: https://hpfx.collab.science.gc.ca
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -201,19 +216,19 @@ jobs:
       - name: Refuse to run without the pinned engine
         run: test -e node_modules/.bin/meteo || { echo "::error::@azohra/meteo.forecast is not installed — refusing to fall back to an unrelated registry package named meteo (README.md)"; exit 1; }
       - name: Build HRDPS 2.5 km (failure must not block the others)
-        run: pnpm exec meteo forecast build --model hrdps-continental --sites catalog/sites.json --output data || echo "::warning::HRDPS build failed"
+        run: NODE_OPTIONS="$WIRE_INSTRUMENT" pnpm exec meteo forecast build --model hrdps-continental --sites catalog/sites.json --output data || echo "::warning::HRDPS build failed"
       - name: Publish HRDPS 2.5 km
         run: .github/scripts/upload-data.sh hrdps-continental
       # RAQDPS is the lightest ECCC fetch (~43 MB/run) and shares this
       # host's sequential budget like every other Datamart builder.
       - name: Build RAQDPS smoke (failure must not block the others)
-        run: pnpm exec meteo forecast build --model raqdps --sites catalog/sites.json --output data || echo "::warning::RAQDPS build failed"
+        run: NODE_OPTIONS="$WIRE_INSTRUMENT" pnpm exec meteo forecast build --model raqdps --sites catalog/sites.json --output data || echo "::warning::RAQDPS build failed"
       - name: Publish RAQDPS smoke
         run: .github/scripts/upload-data.sh raqdps
       # GEPS moves the most bytes over the longest horizon, so it goes last:
       # a timeout here costs only this model's run, and HRDPS has already
       # uploaded.
       - name: Build GEPS 0.5° ensemble (failure must not block the others)
-        run: pnpm exec meteo forecast build --model geps --sites catalog/sites.json --output data || echo "::warning::GEPS build failed"
+        run: NODE_OPTIONS="$WIRE_INSTRUMENT" pnpm exec meteo forecast build --model geps --sites catalog/sites.json --output data || echo "::warning::GEPS build failed"
       - name: Publish GEPS
         run: .github/scripts/upload-data.sh geps
