@@ -5,7 +5,7 @@
   "type": "module",
   "description": "Public forecast-data publisher for Acrophobia",
   "devDependencies": {
-    "@azohra/meteo.forecast": "0.1.0"
+    "@azohra/meteo.forecast": "0.1.1-preview.1"
   },
   "devEngines": {
     "packageManager": {
