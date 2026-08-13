@@ -1,0 +1,130 @@
+# One-off, dispatch-only migration of the private dataset bucket's wire
+# documents from schemaVersion 1 to schemaVersion 2. The bucket holds data
+# copied from the retired public host: older current documents and the
+# append-only history month archives are still v1, while the engine's
+# 15-minute ticks publish v2. The app's move to @azohra/meteo.briefing (a v2
+# parser) must not deploy before this has run with dry_run=false — see
+# README.md, "Dataset maintenance".
+#
+# The engine's `meteo forecast migrate` speaks to the bucket directly on
+# both sides: it reads each model's current site documents and history
+# archives through the authenticated S3 path (the credential trio is
+# present and METEO_DATA_BASE is never set — same posture as
+# build-data.yml) and PUTs rewritten objects back through the same
+# endpoint. No local mirror, no aws CLI: nothing to download or upload
+# around the tool.
+#
+# What one model's migration covers, per the engine source (migrate.ts):
+#   - <model>/sites/<site>.json — the current document, rewritten to v2
+#     when it is v1, left alone when it is already v2;
+#   - <model>/history/<site>/<month>.jsonl.gz for every month since the
+#     history epoch (2026-01) — v1 lines migrate, already-v2 gzip members
+#     survive byte-for-byte, and the append-only member structure is
+#     preserved;
+#   - <model>/history/<site>/<month>.index.json — the byte-offset sidecar,
+#     regenerated to match whenever its archive is rewritten.
+# Every output document is validated against the packaged
+# profile.schema.json before anything uploads; TTLs follow
+# upload-data.sh's arithmetic (open months short, closed months
+# immutable).
+#
+# Idempotent and race-guarded: a re-dispatch reports "nothing to upload —
+# everything published is already v2" and writes nothing; if a scheduled
+# build publishes an object between the read and the write, the tool
+# aborts loudly instead of overwriting — just dispatch again.
+#
+# raqdps (smoke) and goes18-dsr / goes18-aod (observations) are excluded
+# on purpose: their documents carry schemaVersion 1 of their OWN
+# vocabularies (the engine's SCHEMA_VERSION, not the site-forecast
+# SITE_FORECAST_SCHEMA_VERSION this migration targets) and do not match
+# profile.schema.json. They are not v1 forecast documents and must never
+# be fed to this tool.
+name: Migrate forecast data
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: >-
+          Report what would change without writing to the bucket. Dispatch
+          once with the default true and read the report before ever
+          dispatching with false.
+        type: boolean
+        default: true
+      models:
+        description: >-
+          Space-separated model slugs to migrate. The default is every
+          forecast model; raqdps and goes18-* stay out (see the header
+          comment).
+        type: string
+        default: >-
+          hrdps-west hrdps-continental hrrr-conus rdps gdps gfs nam
+          nam-conus-nest reps geps
+
+permissions:
+  contents: read
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    # Never two migrations at once; the engine's own race guard covers
+    # overlap with the build cron.
+    concurrency:
+      group: migrate-data
+      cancel-in-progress: false
+    # Ten models, four sites, a handful of months each — the run is a few
+    # hundred small S3 GETs plus the rewritten PUTs.
+    timeout-minutes: 30
+    # The credential trio puts the engine's dataset reads AND its uploads
+    # on the authenticated S3 path. No aws CLI here, so none of
+    # build-data.yml's CLI-only checksum settings.
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+      METEO_R2_BUCKET: ${{ vars.METEO_R2_BUCKET }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Enable pnpm from the workspace pin
+        run: corepack enable
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+      # Without the local install, npx would fall back to fetching a
+      # registry package named "meteo" — never run the migration on
+      # anything but the pinned engine.
+      - name: Refuse to run without the pinned engine
+        run: test -e node_modules/.bin/meteo || { echo "::error::@azohra/meteo.forecast is not installed — refusing to fall back to an unrelated registry package named meteo (README.md)"; exit 1; }
+      # Dry run is the engine's default posture; --apply is appended only
+      # when the dispatch explicitly set dry_run to false. Every model gets
+      # its full report even if an earlier one fails — the failures are
+      # collected and the job fails at the end naming them.
+      - name: Migrate published documents to schemaVersion 2
+        env:
+          DRY_RUN: ${{ inputs.dry_run }}
+          MODELS: ${{ inputs.models }}
+        run: |
+          apply=""
+          if [ "$DRY_RUN" = "false" ]; then
+            apply="--apply"
+          fi
+          failed=""
+          for model in $MODELS; do
+            # The early ensemble archives predate run.members; 21 is the
+            # builders' declared MEMBER_COUNT for both ECCC ensembles.
+            members=""
+            case "$model" in
+              reps|geps) members="--members 21" ;;
+            esac
+            echo "::group::$model"
+            if ! pnpm exec meteo forecast migrate --model "$model" --sites catalog/sites.json $members $apply; then
+              failed="$failed $model"
+            fi
+            echo "::endgroup::"
+          done
+          if [ -n "$failed" ]; then
+            echo "::error::migration failed for:$failed — nothing was uploaded for those models; fix and re-dispatch (a re-run skips everything already v2)"
+            exit 1
+          fi
