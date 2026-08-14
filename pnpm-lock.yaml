@@ -208,8 +208,8 @@ importers:
   .:
     devDependencies:
       '@azohra/meteo.forecast':
-        specifier: 0.1.2
-        version: 0.1.2
+        specifier: 0.1.3
+        version: 0.1.3
 
 packages:
 
@@ -221,8 +221,8 @@ packages:
     resolution: {integrity: sha512-zFhE0bqBl9qB46B2322ZHEYNobjP6KJhz7REJEhNUN7uxPd3omvWRUaphFysf3po6wBB2fheGVEGBLNXL2hSsQ==}
     engines: {node: '>=22'}
 
-  '@azohra/meteo.forecast@0.1.2':
-    resolution: {integrity: sha512-k3MY1hlWEhp/SbnNwMkd4gnOdF/a+MorxCmc5ypzECN211B/KB6vQdzexzL3sV6zncqhLA42n4BmODnrXEahfg==}
+  '@azohra/meteo.forecast@0.1.3':
+    resolution: {integrity: sha512-Ieu1exkG4FthSihntuVXBT0jXSSmRy5k52z/561rVE1AvbIBwMnyXcv2PyJ615Kh3+xQSDWL5EvsPD/C7zUAkg==}
     engines: {node: '>=22'}
     hasBin: true
 
@@ -317,7 +317,7 @@ snapshots:
     dependencies:
       zod: 4.4.3
 
-  '@azohra/meteo.forecast@0.1.2':
+  '@azohra/meteo.forecast@0.1.3':
     dependencies:
       '@azohra/meteo.briefing': 0.1.1
       '@azohra/meteo.grib': 0.1.2
