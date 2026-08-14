@@ -28,11 +28,13 @@
 # builder). The two ECCC jobs point at different hosts — dd.weather.gc.ca
 # and MSC's sanctioned hpfx.collab.science.gc.ca mirror (identical dated
 # tree, ten-fold peak bandwidth, best-effort link), selected via
-# METEO_DATAMART_BASE — and are balanced by per-run bytes: GEPS, the
-# heaviest stream, pairs with HRDPS (~22 GiB) while RDPS + GDPS + REPS +
-# the 1 km alpha feed total ~22 GiB on the dd side. The 1 km feed lives on
-# dd.alpha.weather.gc.ca (its own host, not mirrored on hpfx), so it rides
-# in the dd job.
+# METEO_DATAMART_BASE — and are balanced by measured transfer time, not
+# bytes: the wire instrumentation clocked dd at 10–16 MiB/s per fresh
+# build against hpfx's ~73 MiB/s at the same 5-connection gate, with dd
+# alone timing out under ensemble volume. So the heavy streams — HRDPS,
+# GEPS, and REPS, ~31 GiB — ride the mirror, while dd carries RDPS + GDPS
+# (~12 GiB). The 1 km feed lives on dd.alpha.weather.gc.ca (its own host,
+# not mirrored on hpfx), so it rides in the dd job.
 name: Build forecast data
 
 on:
@@ -132,16 +134,16 @@ jobs:
         run: .github/scripts/upload-data.sh rrfs
 
   # The dd.weather.gc.ca half of the ECCC split (plus the 1 km alpha host):
-  # whole-domain Datamart GRIB2 streams of roughly 4 GiB RDPS, 8 GiB GDPS,
-  # 9 GiB REPS, and 1.2 GiB for the 1 km alpha feed per fresh run — ~22 GiB
-  # worst case, sampled in memory and released.
+  # whole-domain Datamart GRIB2 streams of roughly 4 GiB RDPS and 8 GiB
+  # GDPS, plus 1.2 GiB for the 1 km alpha feed per fresh run — ~13 GiB
+  # worst case on the slower host, sampled in memory and released.
   eccc-dd:
     runs-on: ubuntu-latest
     concurrency:
       group: build-eccc-dd
       cancel-in-progress: false
     # Covers the worst case of every model in this job landing a new run in
-    # one check (~22 GiB); the jobs are dominated by Datamart transfer.
+    # one check (~13 GiB); the jobs are dominated by Datamart transfer.
     timeout-minutes: 90
     # R2 upload credentials and checksum settings: see the noaa job.
     env:
@@ -182,19 +184,18 @@ jobs:
         run: NODE_OPTIONS="$WIRE_INSTRUMENT" pnpm exec meteo forecast build --model gdps --sites catalog/sites.json --output data || echo "::warning::GDPS build failed"
       - name: Publish GDPS
         run: .github/scripts/upload-data.sh gdps
-      - name: Build REPS 10 km ensemble (failure must not block the others)
-        run: NODE_OPTIONS="$WIRE_INSTRUMENT" pnpm exec meteo forecast build --model reps --sites catalog/sites.json --output data || echo "::warning::REPS build failed"
-      - name: Publish REPS
-        run: .github/scripts/upload-data.sh reps
 
-  # The hpfx half of the ECCC split: HRDPS (~8 GiB) and GEPS (~14 GiB), the
-  # two heaviest single streams, on the mirror's fatter pipe.
+  # The hpfx half of the ECCC split: HRDPS (~8 GiB), REPS (~9 GiB), and
+  # GEPS (~14 GiB) — the heavy streams, on the mirror's fatter pipe. REPS
+  # moved here from dd, which delivered it at 16 MiB/s with one request in
+  # ten failing; hpfx ran the same cycle's HRDPS at ~73 MiB/s clean.
   eccc-hpfx:
     runs-on: ubuntu-latest
     concurrency:
       group: build-eccc-hpfx
       cancel-in-progress: false
-    # Worst case ~22 GiB, matching the dd job's budget.
+    # Worst case ~31 GiB — heavier than dd's, but the mirror moves it
+    # several times faster than dd moves its ~13 GiB.
     timeout-minutes: 90
     # R2 upload credentials and checksum settings: see the noaa job.
     env:
@@ -232,6 +233,10 @@ jobs:
         run: NODE_OPTIONS="$WIRE_INSTRUMENT" pnpm exec meteo forecast build --model raqdps --sites catalog/sites.json --output data || echo "::warning::RAQDPS build failed"
       - name: Publish RAQDPS smoke
         run: .github/scripts/upload-data.sh raqdps
+      - name: Build REPS 10 km ensemble (failure must not block the others)
+        run: NODE_OPTIONS="$WIRE_INSTRUMENT" pnpm exec meteo forecast build --model reps --sites catalog/sites.json --output data || echo "::warning::REPS build failed"
+      - name: Publish REPS
+        run: .github/scripts/upload-data.sh reps
       # GEPS moves the most bytes over the longest horizon, so it goes last:
       # a timeout here costs only this model's run, and HRDPS has already
       # uploaded.
