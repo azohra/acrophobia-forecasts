@@ -123,6 +123,13 @@ jobs:
         run: NODE_OPTIONS="$WIRE_INSTRUMENT" pnpm exec meteo forecast build --model nam-conus-nest --sites catalog/sites.json --output data || echo "::warning::NAM nest build failed"
       - name: Publish NAM CONUS nest
         run: .github/scripts/upload-data.sh nam-conus-nest
+      # RRFS is experimental and moves nest-scale bytes, so it goes very
+      # last; while NOAA's v1.0 bucket sync stays dark the build finds no
+      # complete run and returns without publishing.
+      - name: Build RRFS 3 km (failure must not block the others)
+        run: NODE_OPTIONS="$WIRE_INSTRUMENT" pnpm exec meteo forecast build --model rrfs --sites catalog/sites.json --output data || echo "::warning::RRFS build failed"
+      - name: Publish RRFS
+        run: .github/scripts/upload-data.sh rrfs
 
   # The dd.weather.gc.ca half of the ECCC split (plus the 1 km alpha host):
   # whole-domain Datamart GRIB2 streams of roughly 4 GiB RDPS, 8 GiB GDPS,
