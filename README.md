@@ -36,12 +36,6 @@ pnpm exec meteo forecast catalogue --output models.json
 
 Generated model data belongs in `data/` and is intentionally ignored.
 
-## Dataset maintenance
-
-`migrate-data.yml` is a manual, dry-run-first maintenance workflow for upgrading published forecast
-documents. Its default dispatch only reports proposed changes. An owner must explicitly dispatch it
-with `dry_run=false` to write migrated objects; it is not part of scheduled publication.
-
 ## Adding a launch
 
 Edit `catalog/sites.json`, then regenerate and commit the terrain context:
