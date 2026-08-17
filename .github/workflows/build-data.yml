@@ -272,6 +272,6 @@ jobs:
         run: pnpm exec meteo forecast terrain --sync
       - name: Warn when the pin trails the released engine
         run: |
-          latest=$(npm view @azohra/meteo.forecast version)
+          latest=$(pnpm view @azohra/meteo.forecast version)
           pinned=$(node -p "require('@azohra/meteo.forecast/package.json').version")
           [ "$latest" = "$pinned" ] || echo "::warning::engine pin $pinned trails npm latest $latest"
