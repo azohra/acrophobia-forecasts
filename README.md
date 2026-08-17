@@ -6,9 +6,14 @@ Cloudflare R2 bucket; [`azohra/acrophobia.ca`](https://github.com/azohra/acropho
 bucket through its Worker binding.
 
 The scheduled workflow checks providers every 15 minutes. It builds NOAA and ECCC products for the
-four launches in `catalog/sites.json`, publishes each completed model immediately, and advances the
-dataset's `runs.json` index. The engine is the pinned public npm package
+launches named by the dataset's own `sites.json`, publishes each completed model immediately, and
+advances the dataset's `runs.json` index. The engine is the pinned public npm package
 `@azohra/meteo.forecast`.
+
+This repository holds mechanism only — workflows, the engine pin, and the upload script. Site
+identity (`sites.json` and its derived `site-context.json`) lives at the private bucket's root,
+never in this public tree: each build job fetches `sites.json` through the authenticated endpoint
+before building and fails without it.
 
 ## Repository configuration
 
@@ -31,17 +36,27 @@ only from the default branch, a schedule, or an explicit owner dispatch.
 ```sh
 corepack enable
 pnpm install --frozen-lockfile
-pnpm exec meteo forecast catalogue --output models.json
+pnpm exec meteo forecast catalogue --output data/models.json
 ```
 
-Generated model data belongs in `data/` and is intentionally ignored.
+Generated data belongs in `data/` and is intentionally ignored.
 
-## Adding a launch
+## Changing a launch
 
-Edit `catalog/sites.json`, then regenerate and commit the terrain context:
+Site identity is the club's, and it never enters this repository. To add, move, or retire a launch,
+edit the dataset's `sites.json`, regenerate the terrain context from it, and publish both through
+the authenticated endpoint (the same credential trio the workflows use):
 
 ```sh
-pnpm exec meteo forecast terrain \
-  --sites catalog/sites.json \
-  --output catalog/site-context.json
+aws s3 cp "s3://$METEO_R2_BUCKET/sites.json" data/sites.json --endpoint-url "$R2_ENDPOINT"
+# edit data/sites.json
+pnpm exec meteo forecast terrain --sites data/sites.json --output data/site-context.json
+aws s3 cp data/sites.json "s3://$METEO_R2_BUCKET/sites.json" --endpoint-url "$R2_ENDPOINT" \
+  --cache-control "public, max-age=300" --content-type application/json
+aws s3 cp data/site-context.json "s3://$METEO_R2_BUCKET/site-context.json" --endpoint-url "$R2_ENDPOINT" \
+  --cache-control "public, max-age=300" --content-type application/json
 ```
+
+Slugs are permanent identifiers: they key each model's per-site documents and the history archives,
+so a renamed slug is a new site and its predecessor's history stays retired under the old name. The
+next scheduled tick picks the change up.
