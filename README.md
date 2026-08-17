@@ -43,20 +43,18 @@ Generated data belongs in `data/` and is intentionally ignored.
 
 ## Changing a launch
 
-Site identity is the club's, and it never enters this repository. To add, move, or retire a launch,
-edit the dataset's `sites.json`, regenerate the terrain context from it, and publish both through
-the authenticated endpoint (the same credential trio the workflows use):
+Site identity is the club's, and it never enters this repository. Launches are added, moved, and
+retired in the acrophobia.ca admin, which publishes the dataset's `sites.json`; the next scheduled
+tick builds from it. What remains here is the measurement step — when the catalogue gains a site
+or a forecast point moves, regenerate the terrain context from the published catalogue and upload
+it through the authenticated endpoint (the same credential trio the workflows use):
 
 ```sh
 aws s3 cp "s3://$METEO_R2_BUCKET/sites.json" data/sites.json --endpoint-url "$R2_ENDPOINT"
-# edit data/sites.json
 pnpm exec meteo forecast terrain --sites data/sites.json --output data/site-context.json
-aws s3 cp data/sites.json "s3://$METEO_R2_BUCKET/sites.json" --endpoint-url "$R2_ENDPOINT" \
-  --cache-control "public, max-age=300" --content-type application/json
 aws s3 cp data/site-context.json "s3://$METEO_R2_BUCKET/site-context.json" --endpoint-url "$R2_ENDPOINT" \
   --cache-control "public, max-age=300" --content-type application/json
 ```
 
 Slugs are permanent identifiers: they key each model's per-site documents and the history archives,
-so a renamed slug is a new site and its predecessor's history stays retired under the old name. The
-next scheduled tick picks the change up.
+so a renamed slug is a new site and its predecessor's history stays retired under the old name.
