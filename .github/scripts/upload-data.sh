@@ -6,9 +6,10 @@
 #
 # Requires AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY / R2_ENDPOINT in the
 # environment (the workflow maps them from repo secrets) and METEO_R2_BUCKET
-# (mapped from a repo variable). The catalogues are deliberately absent
-# here: they publish only from publish-catalogues.yml, so racing model
-# uploads can never stomp them.
+# (mapped from a repo variable). The root catalogues are deliberately
+# absent here: models.json publishes only from publish-catalogues.yml, and
+# sites.json / site-context.json are the club's, maintained as README.md
+# describes — so racing model uploads can never stomp any of them.
 set -eu
 
 model="$1"
