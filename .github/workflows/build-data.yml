@@ -72,15 +72,12 @@ jobs:
     # of ranged GETs plus decode-once sampling. Fetch-bound and
     # conservative, carried over from the source pipeline's budget.
     timeout-minutes: 45
-    # The uploads talk to R2 through the S3-compatible API; ubuntu runners
-    # ship aws CLI v2. The checksum settings are Cloudflare's documented
-    # requirement for aws CLI >= 2.23 against R2.
+    # The engine reads published state and publishes through the
+    # authenticated S3 endpoint with this credential set; the aws CLI is
+    # used only to fetch the launch catalogue.
     env:
       AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-      AWS_DEFAULT_REGION: auto
-      AWS_REQUEST_CHECKSUM_CALCULATION: when_required
-      AWS_RESPONSE_CHECKSUM_VALIDATION: when_required
       R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
       METEO_R2_BUCKET: ${{ vars.METEO_R2_BUCKET }}
     steps:
@@ -113,36 +110,36 @@ jobs:
       - name: Build GOES-18 DSR observations (failure must not block the others)
         run: pnpm exec meteo forecast build --model goes18-dsr --sites sites.json --output data || echo "::warning::GOES-18 DSR build failed"
       - name: Publish GOES-18 DSR
-        run: .github/scripts/upload-data.sh goes18-dsr
+        run: pnpm exec meteo forecast publish --model goes18-dsr
       - name: Build GOES-18 AOD observations (failure must not block the others)
         run: pnpm exec meteo forecast build --model goes18-aod --sites sites.json --output data || echo "::warning::GOES-18 AOD build failed"
       - name: Publish GOES-18 AOD
-        run: .github/scripts/upload-data.sh goes18-aod
+        run: pnpm exec meteo forecast publish --model goes18-aod
       - name: Build HRRR 3 km (failure must not block the others)
         run: pnpm exec meteo forecast build --model hrrr-conus --sites sites.json --output data || echo "::warning::HRRR build failed"
       - name: Publish HRRR
-        run: .github/scripts/upload-data.sh hrrr-conus
+        run: pnpm exec meteo forecast publish --model hrrr-conus
       - name: Build GFS 25 km (failure must not block the others)
         run: pnpm exec meteo forecast build --model gfs --sites sites.json --output data || echo "::warning::GFS build failed"
       - name: Publish GFS
-        run: .github/scripts/upload-data.sh gfs
+        run: pnpm exec meteo forecast publish --model gfs
       - name: Build NAM 12 km (failure must not block the others)
         run: pnpm exec meteo forecast build --model nam --sites sites.json --output data || echo "::warning::NAM 12 km build failed"
       - name: Publish NAM 12 km
-        run: .github/scripts/upload-data.sh nam
+        run: pnpm exec meteo forecast publish --model nam
       # The nest moves the most NOAA bytes, so it goes last — a timeout here
       # costs only this model's run, and the others have already uploaded.
       - name: Build NAM CONUS nest 3 km (failure must not block the others)
         run: pnpm exec meteo forecast build --model nam-conus-nest --sites sites.json --output data || echo "::warning::NAM nest build failed"
       - name: Publish NAM CONUS nest
-        run: .github/scripts/upload-data.sh nam-conus-nest
+        run: pnpm exec meteo forecast publish --model nam-conus-nest
       # RRFS is experimental and moves nest-scale bytes, so it goes very
       # last; while NOAA's v1.0 bucket sync stays dark the build finds no
       # complete run and returns without publishing.
       - name: Build RRFS 3 km (failure must not block the others)
         run: pnpm exec meteo forecast build --model rrfs --sites sites.json --output data || echo "::warning::RRFS build failed"
       - name: Publish RRFS
-        run: .github/scripts/upload-data.sh rrfs
+        run: pnpm exec meteo forecast publish --model rrfs
 
   # The dd.weather.gc.ca half of the ECCC split (plus the 1 km alpha host):
   # whole-domain Datamart GRIB2 streams of roughly 4 GiB RDPS and 8 GiB
@@ -160,13 +157,10 @@ jobs:
     # Covers the worst case of every model in this job landing a new run in
     # one check (~13 GiB); the jobs are dominated by Datamart transfer.
     timeout-minutes: 90
-    # R2 upload credentials and checksum settings: see the noaa job.
+    # Credentials: see the noaa job.
     env:
       AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-      AWS_DEFAULT_REGION: auto
-      AWS_REQUEST_CHECKSUM_CALCULATION: when_required
-      AWS_RESPONSE_CHECKSUM_VALIDATION: when_required
       R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
       METEO_R2_BUCKET: ${{ vars.METEO_R2_BUCKET }}
     steps:
@@ -191,15 +185,15 @@ jobs:
       - name: Build HRDPS 1 km (experimental feed; dd.alpha-only)
         run: pnpm exec meteo forecast build --model hrdps-west --sites sites.json --output data || echo "::warning::1 km build failed"
       - name: Publish HRDPS 1 km
-        run: .github/scripts/upload-data.sh hrdps-west
+        run: pnpm exec meteo forecast publish --model hrdps-west
       - name: Build RDPS 10 km (failure must not block the others)
         run: pnpm exec meteo forecast build --model rdps --sites sites.json --output data || echo "::warning::RDPS build failed"
       - name: Publish RDPS
-        run: .github/scripts/upload-data.sh rdps
+        run: pnpm exec meteo forecast publish --model rdps
       - name: Build GDPS 15 km (failure must not block the others)
         run: pnpm exec meteo forecast build --model gdps --sites sites.json --output data || echo "::warning::GDPS build failed"
       - name: Publish GDPS
-        run: .github/scripts/upload-data.sh gdps
+        run: pnpm exec meteo forecast publish --model gdps
 
   # The hpfx half of the ECCC split: HRDPS (~8 GiB), REPS (~9 GiB), and
   # GEPS (~14 GiB) — the heavy streams, on the mirror's fatter pipe. REPS
@@ -217,13 +211,10 @@ jobs:
     # Worst case ~31 GiB — heavier than dd's, but the mirror moves it
     # several times faster than dd moves its ~13 GiB.
     timeout-minutes: 90
-    # R2 upload credentials and checksum settings: see the noaa job.
+    # Credentials: see the noaa job.
     env:
       AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-      AWS_DEFAULT_REGION: auto
-      AWS_REQUEST_CHECKSUM_CALCULATION: when_required
-      AWS_RESPONSE_CHECKSUM_VALIDATION: when_required
       R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
       METEO_R2_BUCKET: ${{ vars.METEO_R2_BUCKET }}
       METEO_DATAMART_BASE: https://hpfx.collab.science.gc.ca
@@ -247,21 +238,21 @@ jobs:
       - name: Build HRDPS 2.5 km (failure must not block the others)
         run: pnpm exec meteo forecast build --model hrdps-continental --sites sites.json --output data || echo "::warning::HRDPS build failed"
       - name: Publish HRDPS 2.5 km
-        run: .github/scripts/upload-data.sh hrdps-continental
+        run: pnpm exec meteo forecast publish --model hrdps-continental
       # RAQDPS is the lightest ECCC fetch (~43 MB/run) and shares this
       # host's sequential budget like every other Datamart builder.
       - name: Build RAQDPS smoke (failure must not block the others)
         run: pnpm exec meteo forecast build --model raqdps --sites sites.json --output data || echo "::warning::RAQDPS build failed"
       - name: Publish RAQDPS smoke
-        run: .github/scripts/upload-data.sh raqdps
+        run: pnpm exec meteo forecast publish --model raqdps
       - name: Build REPS 10 km ensemble (failure must not block the others)
         run: pnpm exec meteo forecast build --model reps --sites sites.json --output data || echo "::warning::REPS build failed"
       - name: Publish REPS
-        run: .github/scripts/upload-data.sh reps
+        run: pnpm exec meteo forecast publish --model reps
       # GEPS moves the most bytes over the longest horizon, so it goes last:
       # a timeout here costs only this model's run, and HRDPS has already
       # uploaded.
       - name: Build GEPS 0.5° ensemble (failure must not block the others)
         run: pnpm exec meteo forecast build --model geps --sites sites.json --output data || echo "::warning::GEPS build failed"
       - name: Publish GEPS
-        run: .github/scripts/upload-data.sh geps
+        run: pnpm exec meteo forecast publish --model geps
