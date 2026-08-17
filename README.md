@@ -22,7 +22,7 @@ repository secrets:
 
 - `R2_ACCESS_KEY_ID`: access key for an R2 Object Read & Write token scoped only to the dataset bucket
 - `R2_SECRET_ACCESS_KEY`: the corresponding secret access key
-- `R2_ENDPOINT`: `https://<account-id>.r2.cloudflarestorage.com`
+- `R2_ENDPOINT`: `https://<account-id>.r2.cloudflarestorage.com` (fed to the engine as `METEO_S3_ENDPOINT`)
 
 The `METEO_R2_BUCKET` repository variable names the destination bucket. Never add
 `METEO_DATA_BASE`: builders must read publication state through the authenticated S3-compatible
@@ -45,16 +45,9 @@ Generated data belongs in `data/` and is intentionally ignored.
 
 Site identity is the club's, and it never enters this repository. Launches are added, moved, and
 retired in the acrophobia.ca admin, which publishes the dataset's `sites.json`; the next scheduled
-tick builds from it. What remains here is the measurement step — when the catalogue gains a site
-or a forecast point moves, regenerate the terrain context from the published catalogue and upload
-it through the authenticated endpoint (the same credential trio the workflows use):
-
-```sh
-aws s3 cp "s3://$METEO_R2_BUCKET/sites.json" data/sites.json --endpoint-url "$R2_ENDPOINT"
-pnpm exec meteo forecast terrain --sites data/sites.json --output data/site-context.json
-aws s3 cp data/site-context.json "s3://$METEO_R2_BUCKET/site-context.json" --endpoint-url "$R2_ENDPOINT" \
-  --cache-control "public, max-age=300" --content-type application/json
-```
+tick builds from it (`--sites dataset`), and the tick's terrain job runs
+`meteo forecast terrain --sync`, which regenerates and republishes `site-context.json` exactly
+when the catalogue moved — no manual step remains.
 
 Slugs are permanent identifiers: they key each model's per-site documents and the history archives,
 so a renamed slug is a new site and its predecessor's history stays retired under the old name.
