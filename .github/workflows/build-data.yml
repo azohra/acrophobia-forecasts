@@ -4,11 +4,11 @@
 # one listing or capabilities request per model plus one manifest GET and
 # exits; uploads happen only when a run advances.
 #
-# Site identity lives in the dataset, not in this public repository: each job
-# fetches sites.json from the bucket root before building and refuses to run
-# without it — the dataset is private and the club's launches stay out of the
-# public tree. This operator never writes sites.json or site-context.json;
-# it only reads them.
+# Site identity lives in the dataset, not in this public repository: builders
+# run --sites dataset, reading sites.json from the bucket root and refusing to
+# build without it — the dataset is private and the club's launches stay out
+# of the public tree. This operator never writes sites.json; the terrain job
+# republishes site-context.json only when the catalogue moved.
 #
 # The engine @azohra/meteo.forecast is published on npmjs.com under the
 # @azohra scope and pinned in package.json — every job still fails fast on
@@ -72,13 +72,13 @@ jobs:
     # of ranged GETs plus decode-once sampling. Fetch-bound and
     # conservative, carried over from the source pipeline's budget.
     timeout-minutes: 45
-    # The engine reads published state and publishes through the
-    # authenticated S3 endpoint with this credential set; the aws CLI is
-    # used only to fetch the launch catalogue.
+    # The engine reads published state — the launch catalogue included —
+    # and publishes through the authenticated S3 endpoint with this
+    # credential set; no aws CLI anywhere.
     env:
       AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-      R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+      METEO_S3_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
       METEO_R2_BUCKET: ${{ vars.METEO_R2_BUCKET }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -94,12 +94,6 @@ jobs:
       # the pinned engine.
       - name: Refuse to run without the pinned engine
         run: test -e node_modules/.bin/meteo || { echo "::error::@azohra/meteo.forecast is not installed — refusing to fall back to an unrelated registry package named meteo (README.md)"; exit 1; }
-      # A missing or empty catalogue fails the job here — never a zero-site
-      # build that publishes nothing and reads as a quiet provider gap.
-      - name: Fetch the launch catalogue from the dataset
-        run: |
-          aws s3 cp "s3://${METEO_R2_BUCKET}/sites.json" sites.json --endpoint-url "$R2_ENDPOINT"
-          test -s sites.json
       # Each model uploads as soon as it finishes: a completed model stays
       # published even if a later builder or the job's timeout kills the
       # run — an end-of-job upload would lose all of it to the timeout.
@@ -108,36 +102,36 @@ jobs:
       # freshest observations publish before the heavier forecast
       # builders start.
       - name: Build GOES-18 DSR observations (failure must not block the others)
-        run: pnpm exec meteo forecast build --model goes18-dsr --sites sites.json --output data || echo "::warning::GOES-18 DSR build failed"
+        run: pnpm exec meteo forecast build --model goes18-dsr --sites dataset --output data || echo "::warning::GOES-18 DSR build failed"
       - name: Publish GOES-18 DSR
         run: pnpm exec meteo forecast publish --model goes18-dsr
       - name: Build GOES-18 AOD observations (failure must not block the others)
-        run: pnpm exec meteo forecast build --model goes18-aod --sites sites.json --output data || echo "::warning::GOES-18 AOD build failed"
+        run: pnpm exec meteo forecast build --model goes18-aod --sites dataset --output data || echo "::warning::GOES-18 AOD build failed"
       - name: Publish GOES-18 AOD
         run: pnpm exec meteo forecast publish --model goes18-aod
       - name: Build HRRR 3 km (failure must not block the others)
-        run: pnpm exec meteo forecast build --model hrrr-conus --sites sites.json --output data || echo "::warning::HRRR build failed"
+        run: pnpm exec meteo forecast build --model hrrr-conus --sites dataset --output data || echo "::warning::HRRR build failed"
       - name: Publish HRRR
         run: pnpm exec meteo forecast publish --model hrrr-conus
       - name: Build GFS 25 km (failure must not block the others)
-        run: pnpm exec meteo forecast build --model gfs --sites sites.json --output data || echo "::warning::GFS build failed"
+        run: pnpm exec meteo forecast build --model gfs --sites dataset --output data || echo "::warning::GFS build failed"
       - name: Publish GFS
         run: pnpm exec meteo forecast publish --model gfs
       - name: Build NAM 12 km (failure must not block the others)
-        run: pnpm exec meteo forecast build --model nam --sites sites.json --output data || echo "::warning::NAM 12 km build failed"
+        run: pnpm exec meteo forecast build --model nam --sites dataset --output data || echo "::warning::NAM 12 km build failed"
       - name: Publish NAM 12 km
         run: pnpm exec meteo forecast publish --model nam
       # The nest moves the most NOAA bytes, so it goes last — a timeout here
       # costs only this model's run, and the others have already uploaded.
       - name: Build NAM CONUS nest 3 km (failure must not block the others)
-        run: pnpm exec meteo forecast build --model nam-conus-nest --sites sites.json --output data || echo "::warning::NAM nest build failed"
+        run: pnpm exec meteo forecast build --model nam-conus-nest --sites dataset --output data || echo "::warning::NAM nest build failed"
       - name: Publish NAM CONUS nest
         run: pnpm exec meteo forecast publish --model nam-conus-nest
       # RRFS is experimental and moves nest-scale bytes, so it goes very
       # last; while NOAA's v1.0 bucket sync stays dark the build finds no
       # complete run and returns without publishing.
       - name: Build RRFS 3 km (failure must not block the others)
-        run: pnpm exec meteo forecast build --model rrfs --sites sites.json --output data || echo "::warning::RRFS build failed"
+        run: pnpm exec meteo forecast build --model rrfs --sites dataset --output data || echo "::warning::RRFS build failed"
       - name: Publish RRFS
         run: pnpm exec meteo forecast publish --model rrfs
 
@@ -161,7 +155,7 @@ jobs:
     env:
       AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-      R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+      METEO_S3_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
       METEO_R2_BUCKET: ${{ vars.METEO_R2_BUCKET }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -174,24 +168,18 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Refuse to run without the pinned engine
         run: test -e node_modules/.bin/meteo || { echo "::error::@azohra/meteo.forecast is not installed — refusing to fall back to an unrelated registry package named meteo (README.md)"; exit 1; }
-      # A missing or empty catalogue fails the job here — never a zero-site
-      # build that publishes nothing and reads as a quiet provider gap.
-      - name: Fetch the launch catalogue from the dataset
-        run: |
-          aws s3 cp "s3://${METEO_R2_BUCKET}/sites.json" sites.json --endpoint-url "$R2_ENDPOINT"
-          test -s sites.json
       # Lightest first so data appears early; each model uploads as soon as
       # it finishes (see the noaa job).
       - name: Build HRDPS 1 km (experimental feed; dd.alpha-only)
-        run: pnpm exec meteo forecast build --model hrdps-west --sites sites.json --output data || echo "::warning::1 km build failed"
+        run: pnpm exec meteo forecast build --model hrdps-west --sites dataset --output data || echo "::warning::1 km build failed"
       - name: Publish HRDPS 1 km
         run: pnpm exec meteo forecast publish --model hrdps-west
       - name: Build RDPS 10 km (failure must not block the others)
-        run: pnpm exec meteo forecast build --model rdps --sites sites.json --output data || echo "::warning::RDPS build failed"
+        run: pnpm exec meteo forecast build --model rdps --sites dataset --output data || echo "::warning::RDPS build failed"
       - name: Publish RDPS
         run: pnpm exec meteo forecast publish --model rdps
       - name: Build GDPS 15 km (failure must not block the others)
-        run: pnpm exec meteo forecast build --model gdps --sites sites.json --output data || echo "::warning::GDPS build failed"
+        run: pnpm exec meteo forecast build --model gdps --sites dataset --output data || echo "::warning::GDPS build failed"
       - name: Publish GDPS
         run: pnpm exec meteo forecast publish --model gdps
 
@@ -215,7 +203,7 @@ jobs:
     env:
       AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-      R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+      METEO_S3_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
       METEO_R2_BUCKET: ${{ vars.METEO_R2_BUCKET }}
       METEO_DATAMART_BASE: https://hpfx.collab.science.gc.ca
     steps:
@@ -229,30 +217,61 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Refuse to run without the pinned engine
         run: test -e node_modules/.bin/meteo || { echo "::error::@azohra/meteo.forecast is not installed — refusing to fall back to an unrelated registry package named meteo (README.md)"; exit 1; }
-      # A missing or empty catalogue fails the job here — never a zero-site
-      # build that publishes nothing and reads as a quiet provider gap.
-      - name: Fetch the launch catalogue from the dataset
-        run: |
-          aws s3 cp "s3://${METEO_R2_BUCKET}/sites.json" sites.json --endpoint-url "$R2_ENDPOINT"
-          test -s sites.json
       - name: Build HRDPS 2.5 km (failure must not block the others)
-        run: pnpm exec meteo forecast build --model hrdps-continental --sites sites.json --output data || echo "::warning::HRDPS build failed"
+        run: pnpm exec meteo forecast build --model hrdps-continental --sites dataset --output data || echo "::warning::HRDPS build failed"
       - name: Publish HRDPS 2.5 km
         run: pnpm exec meteo forecast publish --model hrdps-continental
       # RAQDPS is the lightest ECCC fetch (~43 MB/run) and shares this
       # host's sequential budget like every other Datamart builder.
       - name: Build RAQDPS smoke (failure must not block the others)
-        run: pnpm exec meteo forecast build --model raqdps --sites sites.json --output data || echo "::warning::RAQDPS build failed"
+        run: pnpm exec meteo forecast build --model raqdps --sites dataset --output data || echo "::warning::RAQDPS build failed"
       - name: Publish RAQDPS smoke
         run: pnpm exec meteo forecast publish --model raqdps
       - name: Build REPS 10 km ensemble (failure must not block the others)
-        run: pnpm exec meteo forecast build --model reps --sites sites.json --output data || echo "::warning::REPS build failed"
+        run: pnpm exec meteo forecast build --model reps --sites dataset --output data || echo "::warning::REPS build failed"
       - name: Publish REPS
         run: pnpm exec meteo forecast publish --model reps
       # GEPS moves the most bytes over the longest horizon, so it goes last:
       # a timeout here costs only this model's run, and HRDPS has already
       # uploaded.
       - name: Build GEPS 0.5° ensemble (failure must not block the others)
-        run: pnpm exec meteo forecast build --model geps --sites sites.json --output data || echo "::warning::GEPS build failed"
+        run: pnpm exec meteo forecast build --model geps --sites dataset --output data || echo "::warning::GEPS build failed"
       - name: Publish GEPS
         run: pnpm exec meteo forecast publish --model geps
+
+  # Keeps the published site-context following the site catalogue: fresh is
+  # a quiet no-op; a moved or added launch triggers one DEM-sampling
+  # regeneration and republication. Also the tick's one pin-lag check.
+  terrain:
+    runs-on: ubuntu-latest
+    # See the noaa job: dispatches run only on the default branch ref.
+    if: github.ref == 'refs/heads/main'
+    concurrency:
+      group: terrain
+      cancel-in-progress: false
+    # DEM sampling for a handful of launches; generous for cold caches.
+    timeout-minutes: 30
+    # Credentials: see the noaa job.
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      METEO_S3_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+      METEO_R2_BUCKET: ${{ vars.METEO_R2_BUCKET }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Enable pnpm from the workspace pin
+        run: corepack enable
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Refuse to run without the pinned engine
+        run: test -e node_modules/.bin/meteo || { echo "::error::@azohra/meteo.forecast is not installed — refusing to fall back to an unrelated registry package named meteo (README.md)"; exit 1; }
+      - name: Keep the site context following the catalogue
+        run: pnpm exec meteo forecast terrain --sync
+      - name: Warn when the pin trails the released engine
+        run: |
+          latest=$(npm view @azohra/meteo.forecast version)
+          pinned=$(node -p "require('@azohra/meteo.forecast/package.json').version")
+          [ "$latest" = "$pinned" ] || echo "::warning::engine pin $pinned trails npm latest $latest"

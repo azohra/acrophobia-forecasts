@@ -42,15 +42,11 @@ jobs:
     # other ref skips the job instead of running with secrets.
     if: github.ref == 'refs/heads/main'
     timeout-minutes: 10
-    # R2's S3-compatible API; the checksum settings are Cloudflare's
-    # documented requirement for aws CLI >= 2.23 against R2.
+    # The engine publishes through the authenticated S3 endpoint; no aws CLI.
     env:
       AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-      AWS_DEFAULT_REGION: auto
-      AWS_REQUEST_CHECKSUM_CALCULATION: when_required
-      AWS_RESPONSE_CHECKSUM_VALIDATION: when_required
-      R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+      METEO_S3_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
       METEO_R2_BUCKET: ${{ vars.METEO_R2_BUCKET }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -66,11 +62,5 @@ jobs:
       # pinned engine's catalogue.
       - name: Refuse to run without the pinned engine
         run: test -e node_modules/.bin/meteo || { echo "::error::@azohra/meteo.forecast is not installed — refusing to fall back to an unrelated registry package named meteo (README.md)"; exit 1; }
-      - name: Emit the engine's model catalogue
-        run: pnpm exec meteo forecast catalogue --output data/models.json
-      # Everything that changes with the next run rides a short TTL.
       - name: Publish the model catalogue
-        run: |
-          aws s3 cp data/models.json "s3://${METEO_R2_BUCKET}/models.json" \
-            --endpoint-url "$R2_ENDPOINT" \
-            --cache-control "public, max-age=300" --content-type application/json
+        run: pnpm exec meteo forecast publish --models
