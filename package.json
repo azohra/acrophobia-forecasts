@@ -1,21 +1,14 @@
 {
-  "name": "acrophobia-forecasts",
-  "version": "1.0.0",
-  "private": true,
-  "type": "module",
-  "description": "Public forecast-data publisher for Acrophobia",
-  "devDependencies": {
-    "@azohra/meteo.forecast": "0.6.0"
-  },
-  "devEngines": {
-    "packageManager": {
-      "name": "pnpm",
-      "version": "11.9.0",
-      "onFail": "download"
-    }
-  },
-  "engines": {
-    "node": ">=24"
-  },
-  "packageManager": "pnpm@11.9.0"
+ "name": "acrophobia-forecasts",
+ "version": "1.0.0",
+ "private": true,
+ "type": "module",
+ "description": "Public forecast-data publisher for Acrophobia",
+ "devDependencies": {
+  "@azohra/meteo.forecast": "0.6.0"
+ },
+ "engines": {
+  "node": ">=24"
+ },
+ "packageManager": "pnpm@11.9.0"
 }
