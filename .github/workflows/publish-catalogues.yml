@@ -1,22 +1,12 @@
-# Publishes the engine's model catalogue — models.json, emitted by the
-# pinned engine, so an engine upgrade that changes the model catalogue
-# republishes it via the lockfile path filter — to the private dataset
-# bucket's root.
+# Publishes models.json (the engine's model catalogue) to the private
+# dataset bucket whenever the lockfile changes — an engine upgrade that
+# changes the catalogue republishes it automatically.
 #
-# The other two root catalogues, sites.json and site-context.json, are the
-# club's: they live only in the dataset bucket, never in this public
-# repository, and this operator reads them without ever writing them.
-# Maintaining them is documented in README.md.
+# sites.json and site-context.json are not touched here: they live only in
+# the dataset bucket and this operator only reads them. See README.md.
 #
-# The model catalogue publishes only from here, only from main, in one
-# concurrency group: this structurally replaces the source pipeline's
-# catalogue-epoch race guard, which existed because catalogues rode along
-# on racing per-model upload jobs. Model uploads (build-data.yml) never
-# touch it.
-#
-# The engine @azohra/meteo.forecast is published on npmjs.com under the
-# @azohra scope and pinned in package.json — the engine guard step fails
-# fast if it is ever missing. Repository configuration: README.md.
+# Runs in its own concurrency group, separate from build-data.yml's per-model
+# uploads, so catalogue publishes can't race with them.
 name: Publish catalogues
 
 on:
@@ -37,12 +27,8 @@ concurrency:
 jobs:
   publish:
     runs-on: ubuntu-latest
-    # The README's rule that publishing runs only from the default branch,
-    # by push or owner dispatch, holds by mechanism: a dispatch from any
-    # other ref skips the job instead of running with secrets.
     if: github.ref == 'refs/heads/main'
     timeout-minutes: 10
-    # The engine publishes through the authenticated S3 endpoint; no aws CLI.
     env:
       AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
@@ -57,9 +43,6 @@ jobs:
           node-version: 24
       - name: Install locked dependencies
         run: pnpm install --frozen-lockfile
-      # Without the local install, npx would fall back to fetching a
-      # registry package named "meteo" — never publish anything but the
-      # pinned engine's catalogue.
       - name: Refuse to run without the pinned engine
         run: test -e node_modules/.bin/meteo || { echo "::error::@azohra/meteo.forecast is not installed — refusing to fall back to an unrelated registry package named meteo (README.md)"; exit 1; }
       - name: Publish the model catalogue

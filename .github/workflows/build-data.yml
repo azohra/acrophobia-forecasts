@@ -1,46 +1,28 @@
-# Checks providers every 15 minutes for new model runs and publishes derived
-# site-forecast documents for the club's launches to the private R2 bucket
-# named by the METEO_R2_BUCKET repository variable. A no-new-run check costs
-# one listing or capabilities request per model plus one manifest GET and
-# exits; uploads happen only when a run advances.
+# Checks NOAA and ECCC every 15 minutes for new model runs and publishes
+# derived per-site forecast documents to the private R2 bucket named by the
+# METEO_R2_BUCKET repository variable. A no-new-run check is cheap (one
+# listing/capabilities request per model plus one manifest GET); uploads only
+# happen when a run actually advances.
 #
-# Site identity lives in the dataset, not in this public repository: builders
-# run --sites dataset, reading sites.json from the bucket root and refusing to
-# build without it — the dataset is private and the club's launches stay out
-# of the public tree. This operator never writes sites.json; the terrain job
-# republishes site-context.json only when the catalogue moved.
+# Site identity lives in the dataset bucket, not this repo: builders run
+# --sites dataset, reading sites.json from the bucket and refusing to build
+# without it. This operator never writes sites.json — see README.md.
 #
-# The engine @azohra/meteo.forecast is published on npmjs.com under the
-# @azohra scope and pinned in package.json — every job still fails fast on
-# the engine guard step if it is ever missing. Activation checklist:
-# README.md.
+# The engine is the published @azohra/meteo.forecast npm package, pinned in
+# package.json. Every job fails fast via the engine-guard step below if it's
+# ever missing (no fallback to an unrelated registry package named "meteo").
 #
-# The engine is the released @azohra/meteo.forecast package (bin: meteo) pinned
-# by the lockfile; its own CI gates releases upstream, so there is no test
-# gate here — a consumer pins a release, it does not rebuild a source tree.
+# METEO_DATA_BASE is intentionally never set: with R2_ENDPOINT +
+# AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_KEY present, the engine reads its own
+# publish state through the authenticated S3 endpoint. Setting
+# METEO_DATA_BASE would switch it to the public HTTPS path, which can't see
+# unpublished state.
 #
-# Builders learn what is already published from the dataset itself. The
-# dataset is private, so METEO_DATA_BASE is never set: with the credential
-# trio (R2_ENDPOINT + AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_KEY) present and
-# no explicit base, the engine reads its own published state through the
-# authenticated S3 path. Setting METEO_DATA_BASE would force the public
-# HTTPS path and every freshness read would 401.
-#
-# Builds group by provider rate-limit domain, one job per provider host, so
-# the per-host connection rule holds by construction: builders inside a job
-# run sequentially, each opening at most its FETCH_CONCURRENCY connections
-# (5 per ECCC Datamart host, 10 per NOAA S3 bucket — the arithmetic against
-# MSC's documented 86,400 requests/day budget lives in the engine's ECCC
-# builder). The two ECCC jobs point at different hosts — dd.weather.gc.ca
-# and MSC's sanctioned hpfx.collab.science.gc.ca mirror (identical dated
-# tree, ten-fold peak bandwidth, best-effort link), selected via
-# METEO_DATAMART_BASE — and are balanced by measured transfer time, not
-# bytes: the wire instrumentation clocked dd at 10–16 MiB/s per fresh
-# build against hpfx's ~73 MiB/s at the same 5-connection gate, with dd
-# alone timing out under ensemble volume. So the heavy streams — HRDPS,
-# GEPS, and REPS, ~31 GiB — ride the mirror, while dd carries RDPS + GDPS
-# (~12 GiB). The 1 km feed lives on dd.alpha.weather.gc.ca (its own host,
-# not mirrored on hpfx), so it rides in the dd job.
+# Builds are split into one job per provider host to respect each host's
+# rate limits, with FETCH_CONCURRENCY capped per job (5 for ECCC Datamart
+# hosts, 10 for NOAA S3 buckets). ECCC is further split across its two
+# mirrors (dd.weather.gc.ca and the higher-bandwidth hpfx.collab.science.gc.ca)
+# with the heavier model streams (HRDPS, GEPS, REPS) routed to hpfx.
 name: Build forecast data
 
 on:
@@ -52,29 +34,16 @@ permissions:
   contents: read
 
 jobs:
-  # The NOAA builders pull GRIB records by byte range (~1.3 GB HRRR, ~2 GB
-  # GFS, ~0.3 GB NAM 12 km, ~1.7 GB NAM nest per fresh run) — far lighter
-  # than the ECCC streams, so this job gets its own concurrency group: a
-  # slow ECCC stream must never block the next tick's NOAA pickup. Each
-  # bucket is its own host (noaa-nam-pds serves both NAM products) and the
-  # builders run sequentially, so no NOAA host ever sees more than one
-  # builder's FETCH_CONCURRENCY connections.
+  # NOAA builders pull GRIB records by byte range and are lighter than the
+  # ECCC streams, so this job has its own concurrency group — a slow ECCC
+  # run shouldn't block the next NOAA tick.
   noaa:
     runs-on: ubuntu-latest
-    # The README's rule that publishing runs only from the default branch,
-    # by schedule or owner dispatch, holds by mechanism: a dispatch from any
-    # other ref skips the job instead of running with secrets.
     if: github.ref == 'refs/heads/main'
     concurrency:
       group: build-noaa
       cancel-in-progress: false
-    # Worst case is every model landing a fresh run in one check: ~5.3 GB
-    # of ranged GETs plus decode-once sampling. Fetch-bound and
-    # conservative, carried over from the source pipeline's budget.
     timeout-minutes: 45
-    # The engine reads published state — the launch catalogue included —
-    # and publishes through the authenticated S3 endpoint with this
-    # credential set; no aws CLI anywhere.
     env:
       AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
@@ -89,18 +58,11 @@ jobs:
           node-version: 24
       - name: Install locked dependencies
         run: pnpm install --frozen-lockfile
-      # Without the local install, npx would fall back to fetching a
-      # registry package named "meteo" — never run the tick on anything but
-      # the pinned engine.
       - name: Refuse to run without the pinned engine
         run: test -e node_modules/.bin/meteo || { echo "::error::@azohra/meteo.forecast is not installed — refusing to fall back to an unrelated registry package named meteo (README.md)"; exit 1; }
-      # Each model uploads as soon as it finishes: a completed model stays
-      # published even if a later builder or the job's timeout kills the
-      # run — an end-of-job upload would lose all of it to the timeout.
-      # GOES first: at the 15-minute tick each product usually finds
-      # exactly one new 10-minute granule, read by byte range, so the
-      # freshest observations publish before the heavier forecast
-      # builders start.
+      # Each model publishes as soon as it finishes, so a timeout later in
+      # the job doesn't lose work that already completed. Lightest/freshest
+      # (GOES) first, heaviest (the CONUS nest, then experimental RRFS) last.
       - name: Build GOES-18 DSR observations (failure must not block the others)
         run: pnpm exec meteo forecast build --model goes18-dsr --sites dataset --output data || echo "::warning::GOES-18 DSR build failed"
       - name: Publish GOES-18 DSR
@@ -121,37 +83,23 @@ jobs:
         run: pnpm exec meteo forecast build --model nam --sites dataset --output data || echo "::warning::NAM 12 km build failed"
       - name: Publish NAM 12 km
         run: pnpm exec meteo forecast publish --model nam
-      # The nest moves the most NOAA bytes, so it goes last — a timeout here
-      # costs only this model's run, and the others have already uploaded.
       - name: Build NAM CONUS nest 3 km (failure must not block the others)
         run: pnpm exec meteo forecast build --model nam-conus-nest --sites dataset --output data || echo "::warning::NAM nest build failed"
       - name: Publish NAM CONUS nest
         run: pnpm exec meteo forecast publish --model nam-conus-nest
-      # RRFS is experimental and moves nest-scale bytes, so it goes very
-      # last; while NOAA's v1.0 bucket sync stays dark the build finds no
-      # complete run and returns without publishing.
       - name: Build RRFS 3 km (failure must not block the others)
         run: pnpm exec meteo forecast build --model rrfs --sites dataset --output data || echo "::warning::RRFS build failed"
       - name: Publish RRFS
         run: pnpm exec meteo forecast publish --model rrfs
 
-  # The dd.weather.gc.ca half of the ECCC split (plus the 1 km alpha host):
-  # whole-domain Datamart GRIB2 streams of roughly 4 GiB RDPS and 8 GiB
-  # GDPS, plus 1.2 GiB for the 1 km alpha feed per fresh run — ~13 GiB
-  # worst case on the slower host, sampled in memory and released.
+  # dd.weather.gc.ca half of the ECCC split, plus the dd.alpha-only 1 km feed.
   eccc-dd:
     runs-on: ubuntu-latest
-    # The README's rule that publishing runs only from the default branch,
-    # by schedule or owner dispatch, holds by mechanism: a dispatch from any
-    # other ref skips the job instead of running with secrets.
     if: github.ref == 'refs/heads/main'
     concurrency:
       group: build-eccc-dd
       cancel-in-progress: false
-    # Covers the worst case of every model in this job landing a new run in
-    # one check (~13 GiB); the jobs are dominated by Datamart transfer.
     timeout-minutes: 90
-    # Credentials: see the noaa job.
     env:
       AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
@@ -168,8 +116,6 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Refuse to run without the pinned engine
         run: test -e node_modules/.bin/meteo || { echo "::error::@azohra/meteo.forecast is not installed — refusing to fall back to an unrelated registry package named meteo (README.md)"; exit 1; }
-      # Lightest first so data appears early; each model uploads as soon as
-      # it finishes (see the noaa job).
       - name: Build HRDPS 1 km (experimental feed; dd.alpha-only)
         run: pnpm exec meteo forecast build --model hrdps-west --sites dataset --output data || echo "::warning::1 km build failed"
       - name: Publish HRDPS 1 km
@@ -183,23 +129,15 @@ jobs:
       - name: Publish GDPS
         run: pnpm exec meteo forecast publish --model gdps
 
-  # The hpfx half of the ECCC split: HRDPS (~8 GiB), REPS (~9 GiB), and
-  # GEPS (~14 GiB) — the heavy streams, on the mirror's fatter pipe. REPS
-  # moved here from dd, which delivered it at 16 MiB/s with one request in
-  # ten failing; hpfx ran the same cycle's HRDPS at ~73 MiB/s clean.
+  # hpfx.collab.science.gc.ca half of the ECCC split — carries the heaviest
+  # streams (HRDPS, RAQDPS, REPS, GEPS) because it's measurably faster than dd.
   eccc-hpfx:
     runs-on: ubuntu-latest
-    # The README's rule that publishing runs only from the default branch,
-    # by schedule or owner dispatch, holds by mechanism: a dispatch from any
-    # other ref skips the job instead of running with secrets.
     if: github.ref == 'refs/heads/main'
     concurrency:
       group: build-eccc-hpfx
       cancel-in-progress: false
-    # Worst case ~31 GiB — heavier than dd's, but the mirror moves it
-    # several times faster than dd moves its ~13 GiB.
     timeout-minutes: 90
-    # Credentials: see the noaa job.
     env:
       AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
@@ -221,8 +159,6 @@ jobs:
         run: pnpm exec meteo forecast build --model hrdps-continental --sites dataset --output data || echo "::warning::HRDPS build failed"
       - name: Publish HRDPS 2.5 km
         run: pnpm exec meteo forecast publish --model hrdps-continental
-      # RAQDPS is the lightest ECCC fetch (~43 MB/run) and shares this
-      # host's sequential budget like every other Datamart builder.
       - name: Build RAQDPS smoke (failure must not block the others)
         run: pnpm exec meteo forecast build --model raqdps --sites dataset --output data || echo "::warning::RAQDPS build failed"
       - name: Publish RAQDPS smoke
@@ -231,27 +167,20 @@ jobs:
         run: pnpm exec meteo forecast build --model reps --sites dataset --output data || echo "::warning::REPS build failed"
       - name: Publish REPS
         run: pnpm exec meteo forecast publish --model reps
-      # GEPS moves the most bytes over the longest horizon, so it goes last:
-      # a timeout here costs only this model's run, and HRDPS has already
-      # uploaded.
       - name: Build GEPS 0.5° ensemble (failure must not block the others)
         run: pnpm exec meteo forecast build --model geps --sites dataset --output data || echo "::warning::GEPS build failed"
       - name: Publish GEPS
         run: pnpm exec meteo forecast publish --model geps
 
-  # Keeps the published site-context following the site catalogue: fresh is
-  # a quiet no-op; a moved or added launch triggers one DEM-sampling
-  # regeneration and republication. Also the tick's one pin-lag check.
+  # Regenerates site-context.json when the site catalogue changes, and warns
+  # once per tick if the engine pin is behind the latest npm release.
   terrain:
     runs-on: ubuntu-latest
-    # See the noaa job: dispatches run only on the default branch ref.
     if: github.ref == 'refs/heads/main'
     concurrency:
       group: terrain
       cancel-in-progress: false
-    # DEM sampling for a handful of launches; generous for cold caches.
     timeout-minutes: 30
-    # Credentials: see the noaa job.
     env:
       AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
