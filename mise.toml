@@ -1,0 +1,255 @@
+# mise is the command surface for this repo: `mise tasks` lists the verbs.
+# The workflows in .github/workflows only schedule, inject secrets, and call
+# one verb each — the bodies live here so any slice runs by hand too:
+# `mise run build:data:gfs` rebuilds one model, `mise run build:data:noaa`
+# one provider host, `mise run build:data` the full pass.
+#
+# Every task that writes to the dataset bucket declares its credentials as
+# required (see the forecast:publisher template), so a missing credential
+# fails with its name instead of a half-configured build. METEO_DATA_BASE is
+# intentionally never set: with the S3 credentials present the engine reads
+# its own publish state through the authenticated endpoint; setting it would
+# switch the engine to the public HTTPS path, which can't see unpublished
+# state.
+
+min_version = { soft = "2026.8.10" }
+
+# Secret-shaped values never appear in task output.
+redactions = ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "METEO_S3_ENDPOINT"]
+
+[tool_config]
+# Tools must resolve from the committed mise.lock (version + checksum + url).
+locked = true
+
+[tools]
+# CI and local runs both resolve this toolchain; there is no setup-node or
+# corepack step anywhere. The pnpm version must stay equal to package.json's
+# packageManager field, which pnpm itself enforces at install time.
+node = "24"
+pnpm = "11.9.0"
+
+# Any task that writes to the dataset bucket: frozen install first, R2
+# credentials required by name. The default body is one model's
+# build-then-publish pair; the terrain and catalogue tasks override it.
+#
+# Build failures downgrade to a warning so one provider outage can't block
+# the models after it, but publish still runs so a completed build is never
+# stranded. The ::warning:: prefix becomes an annotation when this runs in
+# GitHub Actions and is harmless anywhere else.
+[task_templates."forecast:publisher"]
+depends = ["install"]
+usage = '''
+flag "--access-key-id <id>" env="AWS_ACCESS_KEY_ID" required=#true help="R2 access key id (pass via env, never on the command line)"
+flag "--secret-access-key <key>" env="AWS_SECRET_ACCESS_KEY" required=#true help="R2 secret access key (pass via env, never on the command line)"
+flag "--s3-endpoint <url>" env="METEO_S3_ENDPOINT" required=#true help="R2 S3 endpoint: https://<account-id>.r2.cloudflarestorage.com"
+flag "--bucket <name>" env="METEO_R2_BUCKET" required=#true help="Destination R2 bucket name"
+'''
+run = [
+  'pnpm exec meteo forecast build --model {{vars.model}} --sites dataset --output data || echo "::warning::{{vars.name}} build failed"',
+  'pnpm exec meteo forecast publish --model {{vars.model}}',
+]
+
+[tasks.install]
+description = "Frozen install; refuses to proceed without the pinned engine"
+# The engine is the published @azohra/meteo.forecast npm package, pinned in
+# package.json. The guard refuses to fall back to an unrelated registry
+# package named "meteo" (see README.md).
+run = [
+  "pnpm install --frozen-lockfile",
+  'test -e node_modules/.bin/meteo || { echo "install: @azohra/meteo.forecast is not installed — refusing to fall back to an unrelated registry package named meteo (README.md)" >&2; exit 1; }',
+]
+sources = ["package.json", "pnpm-lock.yaml"]
+outputs = { auto = true }
+
+# ── repo verbs ──────────────────────────────────────────────────────────
+
+[tasks.setup]
+description = "Arm the commit gate"
+run = "mise generate git-pre-commit --write --task=pre-commit"
+
+[tasks.check]
+description = "Lockfile agreement and the engine guard"
+run = """
+#!/usr/bin/env bash
+set -euo pipefail
+CI=true pnpm install --frozen-lockfile
+test -e node_modules/.bin/meteo || { echo "check: @azohra/meteo.forecast is not installed" >&2; exit 1; }
+echo "check: engine pinned and installed"
+"""
+
+[tasks.pre-commit]
+description = "Commit gate: branches author, main never does"
+run = """
+#!/usr/bin/env bash
+set -euo pipefail
+[ "$(git branch --show-current)" != "main" ] || { echo "pre-commit: refusing — commits are authored on branches, never on main" >&2; exit 1; }
+mise run check
+"""
+
+[tasks.update-engine]
+description = "Roll the @azohra/meteo.forecast pin (authoring helper; land it yourself)"
+usage = 'arg "<version>" help="Engine version like 0.6.1"'
+run = """
+#!/usr/bin/env bash
+set -euo pipefail
+v="${usage_version:?usage: mise run update-engine -- <version>}"
+pnpm add -D --save-exact "@azohra/meteo.forecast@$v"
+mise run check
+echo "pin rolled to $v — commit and land; the lockfile path filter republishes the model catalogue on landing"
+"""
+
+# ── build:data — the model pass ─────────────────────────────────────────
+#
+# Builds are split by provider host to respect each host's rate limits,
+# with FETCH_CONCURRENCY capped per host (5 for ECCC Datamart hosts, 10 for
+# NOAA S3 buckets). ECCC is further split across its two mirrors
+# (dd.weather.gc.ca and the higher-bandwidth hpfx.collab.science.gc.ca),
+# with the heavier model streams (HRDPS, RAQDPS, REPS, GEPS) routed to hpfx.
+# Within a host the models run in sequence — lightest/freshest (GOES) first,
+# heaviest last — and each model publishes as soon as it finishes, so a
+# timeout late in the pass doesn't lose work that already completed.
+
+[tasks."build:data"]
+description = "Full model pass: every provider host plus the terrain sync"
+depends = [
+  "build:data:noaa",
+  "build:data:eccc-dd",
+  "build:data:eccc-hpfx",
+  "build:data:terrain",
+]
+
+[tasks."build:data:noaa"]
+description = "NOAA models in sequence (GRIB byte-range pulls from NOAA S3)"
+run = [
+  { task = "build:data:goes18-dsr" },
+  { task = "build:data:goes18-aod" },
+  { task = "build:data:hrrr-conus" },
+  { task = "build:data:gfs" },
+  { task = "build:data:nam" },
+  { task = "build:data:nam-conus-nest" },
+  { task = "build:data:rrfs" },
+]
+
+[tasks."build:data:eccc-dd"]
+description = "ECCC models served from dd.weather.gc.ca (plus the dd.alpha-only 1 km feed)"
+run = [
+  { task = "build:data:hrdps-west" },
+  { task = "build:data:rdps" },
+  { task = "build:data:gdps" },
+]
+
+[tasks."build:data:eccc-hpfx"]
+description = "ECCC models served from hpfx.collab.science.gc.ca (the heaviest streams)"
+run = [
+  { task = "build:data:hrdps-continental" },
+  { task = "build:data:raqdps" },
+  { task = "build:data:reps" },
+  { task = "build:data:geps" },
+]
+
+# NOAA models.
+
+[tasks."build:data:goes18-dsr"]
+extends = "forecast:publisher"
+description = "GOES-18 DSR observations"
+vars = { model = "goes18-dsr", name = "GOES-18 DSR" }
+
+[tasks."build:data:goes18-aod"]
+extends = "forecast:publisher"
+description = "GOES-18 AOD observations"
+vars = { model = "goes18-aod", name = "GOES-18 AOD" }
+
+[tasks."build:data:hrrr-conus"]
+extends = "forecast:publisher"
+description = "HRRR 3 km"
+vars = { model = "hrrr-conus", name = "HRRR" }
+
+[tasks."build:data:gfs"]
+extends = "forecast:publisher"
+description = "GFS 25 km"
+vars = { model = "gfs", name = "GFS" }
+
+[tasks."build:data:nam"]
+extends = "forecast:publisher"
+description = "NAM 12 km"
+vars = { model = "nam", name = "NAM 12 km" }
+
+[tasks."build:data:nam-conus-nest"]
+extends = "forecast:publisher"
+description = "NAM CONUS nest 3 km"
+vars = { model = "nam-conus-nest", name = "NAM nest" }
+
+[tasks."build:data:rrfs"]
+extends = "forecast:publisher"
+description = "RRFS 3 km (experimental)"
+vars = { model = "rrfs", name = "RRFS" }
+
+# ECCC models on the dd.weather.gc.ca mirror.
+
+[tasks."build:data:hrdps-west"]
+extends = "forecast:publisher"
+description = "HRDPS 1 km (experimental feed; dd.alpha-only)"
+vars = { model = "hrdps-west", name = "1 km" }
+
+[tasks."build:data:rdps"]
+extends = "forecast:publisher"
+description = "RDPS 10 km"
+vars = { model = "rdps", name = "RDPS" }
+
+[tasks."build:data:gdps"]
+extends = "forecast:publisher"
+description = "GDPS 15 km"
+vars = { model = "gdps", name = "GDPS" }
+
+# ECCC models routed to the hpfx mirror.
+
+[tasks."build:data:hrdps-continental"]
+extends = "forecast:publisher"
+description = "HRDPS 2.5 km"
+vars = { model = "hrdps-continental", name = "HRDPS" }
+env.METEO_DATAMART_BASE = "https://hpfx.collab.science.gc.ca"
+
+[tasks."build:data:raqdps"]
+extends = "forecast:publisher"
+description = "RAQDPS smoke"
+vars = { model = "raqdps", name = "RAQDPS" }
+env.METEO_DATAMART_BASE = "https://hpfx.collab.science.gc.ca"
+
+[tasks."build:data:reps"]
+extends = "forecast:publisher"
+description = "REPS 10 km ensemble"
+vars = { model = "reps", name = "REPS" }
+env.METEO_DATAMART_BASE = "https://hpfx.collab.science.gc.ca"
+
+[tasks."build:data:geps"]
+extends = "forecast:publisher"
+description = "GEPS 0.5° ensemble"
+vars = { model = "geps", name = "GEPS" }
+env.METEO_DATAMART_BASE = "https://hpfx.collab.science.gc.ca"
+
+# Not a model: regenerates site-context.json when the site catalogue
+# changes, and warns once per pass if the engine pin trails the latest npm
+# release.
+[tasks."build:data:terrain"]
+extends = "forecast:publisher"
+description = "Sync site-context.json with the site catalogue; warn if the engine pin trails npm"
+run = [
+  "pnpm exec meteo forecast terrain --sync",
+  '''
+latest=$(pnpm view @azohra/meteo.forecast version)
+pinned=$(node -p "require('@azohra/meteo.forecast/package.json').version")
+[ "$latest" = "$pinned" ] || echo "::warning::engine pin $pinned trails npm latest $latest"
+''',
+]
+
+# ── publish:catalogues ──────────────────────────────────────────────────
+
+# Publishes models.json (the engine's model catalogue) to the dataset
+# bucket. The workflow runs this whenever the lockfile changes on main, so
+# an engine upgrade that changes the catalogue republishes it automatically.
+# sites.json and site-context.json are not touched here: they live only in
+# the dataset bucket and this operator only reads them (README.md).
+[tasks."publish:catalogues"]
+extends = "forecast:publisher"
+description = "Publish the engine's model catalogue (models.json) to the dataset bucket"
+run = "pnpm exec meteo forecast publish --models"

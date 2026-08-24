@@ -35,9 +35,20 @@ schedule, or via manual dispatch from the repo owner.
 
 ## Local validation
 
+The workflow bodies are [mise](https://mise.jdx.dev) tasks — `mise tasks` lists them. Anything
+that writes to the bucket needs the credentials above in the environment and fails with the missing
+name otherwise, and a single model can be rerun alone:
+
 ```sh
-corepack enable
-pnpm install --frozen-lockfile
+mise install                 # node + pnpm, pinned by mise.lock
+mise run build:data:gfs      # build and publish one model
+mise run build:data          # the full pass
+```
+
+A credential-free smoke test that touches no bucket:
+
+```sh
+mise run install
 pnpm exec meteo forecast catalogue --output data/models.json
 ```
 
