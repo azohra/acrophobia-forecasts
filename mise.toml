@@ -183,6 +183,10 @@ vars = { model = "nam-conus-nest", name = "NAM nest" }
 extends = "forecast:publisher"
 description = "RRFS 3 km (experimental)"
 vars = { model = "rrfs", name = "RRFS" }
+# NOAA's parallel feed moved to noaa-rrfs-ops-pds when the prototype bucket
+# stopped updating on 2026-08-12 (SCN 26-48). Remove once the engine default
+# points here.
+env = { METEO_RRFS_BASE = "https://noaa-rrfs-ops-pds.s3.amazonaws.com" }
 
 # ECCC models on the dd.weather.gc.ca mirror.
 
