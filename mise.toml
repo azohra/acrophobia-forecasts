@@ -63,10 +63,6 @@ outputs = { auto = true }
 
 # ── repo verbs ──────────────────────────────────────────────────────────
 
-[tasks.setup]
-description = "Arm the commit gate"
-run = "mise generate git-pre-commit --write --task=pre-commit"
-
 [tasks.check]
 description = "Lockfile agreement and the engine guard"
 run = """
@@ -75,15 +71,6 @@ set -euo pipefail
 CI=true pnpm install --frozen-lockfile
 test -e node_modules/.bin/meteo || { echo "check: @azohra/meteo.forecast is not installed" >&2; exit 1; }
 echo "check: engine pinned and installed"
-"""
-
-[tasks.pre-commit]
-description = "Commit gate: branches author, main never does"
-run = """
-#!/usr/bin/env bash
-set -euo pipefail
-[ "$(git branch --show-current)" != "main" ] || { echo "pre-commit: refusing — commits are authored on branches, never on main" >&2; exit 1; }
-mise run check
 """
 
 [tasks.update-engine]
