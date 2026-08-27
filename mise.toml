@@ -49,6 +49,23 @@ run = [
   'pnpm exec meteo forecast publish --model {{vars.model}}',
 ]
 
+# What this repository needs in its environment, and which of those
+# disclosure would compromise. Read it; do not restate it.
+[tasks."env:contract"]
+hide = true
+description = "Every variable this repository needs, and whether it is a secret"
+run = """
+cat <<'CONTRACT'
+secret  AWS_ACCESS_KEY_ID
+secret  AWS_SECRET_ACCESS_KEY
+secret  R2_ACCESS_KEY_ID
+secret  R2_SECRET_ACCESS_KEY
+value   METEO_R2_BUCKET
+value   METEO_S3_ENDPOINT
+value   R2_ENDPOINT
+CONTRACT
+"""
+
 [tasks.install]
 description = "Frozen install; refuses to proceed without the pinned engine"
 # The engine is the published @azohra/meteo.forecast npm package, pinned in
