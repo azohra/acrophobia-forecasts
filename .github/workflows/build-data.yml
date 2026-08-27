@@ -30,7 +30,7 @@ jobs:
     env:
       AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-      METEO_S3_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+      METEO_S3_ENDPOINT: ${{ vars.R2_ENDPOINT }}
       METEO_R2_BUCKET: ${{ vars.METEO_R2_BUCKET }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -47,7 +47,7 @@ jobs:
     env:
       AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-      METEO_S3_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+      METEO_S3_ENDPOINT: ${{ vars.R2_ENDPOINT }}
       METEO_R2_BUCKET: ${{ vars.METEO_R2_BUCKET }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -64,7 +64,7 @@ jobs:
     env:
       AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-      METEO_S3_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+      METEO_S3_ENDPOINT: ${{ vars.R2_ENDPOINT }}
       METEO_R2_BUCKET: ${{ vars.METEO_R2_BUCKET }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -81,7 +81,7 @@ jobs:
     env:
       AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-      METEO_S3_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+      METEO_S3_ENDPOINT: ${{ vars.R2_ENDPOINT }}
       METEO_R2_BUCKET: ${{ vars.METEO_R2_BUCKET }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
