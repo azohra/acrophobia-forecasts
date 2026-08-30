@@ -4,4 +4,5 @@ models.json
 .DS_Store
 
 # mise
-mise.local.toml
+/mise.local.toml
+/mise.local.lock
