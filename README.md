@@ -40,7 +40,7 @@ that writes to the bucket needs the credentials above in the environment and fai
 name otherwise, and a single model can be rerun alone:
 
 ```sh
-mise install                 # node + pnpm, pinned by mise.lock
+mise install                 # node + pnpm
 mise run build:data:gfs      # build and publish one model
 mise run build:data          # the full pass
 ```

@@ -5,4 +5,4 @@ models.json
 
 # mise
 /mise.local.toml
-/mise.local.lock
+mise*.lock

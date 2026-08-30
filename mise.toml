@@ -16,16 +16,13 @@ min_version = { soft = "2026.8.10" }
 # Secret-shaped values never appear in task output.
 redactions = ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "METEO_S3_ENDPOINT"]
 
-[tool_config]
-# Tools must resolve from the committed mise.lock (version + checksum + url).
-locked = true
+[settings]
+idiomatic_version_file_enable_tools = ["pnpm"]
 
 [tools]
 # CI and local runs both resolve this toolchain; there is no setup-node or
-# corepack step anywhere. The pnpm version must stay equal to package.json's
-# packageManager field, which pnpm itself enforces at install time.
+# corepack step anywhere. package.json is the pnpm version authority.
 node = "24"
-pnpm = "11.9.0"
 
 # Any task that writes to the dataset bucket: frozen install first, R2
 # credentials required by name. The default body is one model's
