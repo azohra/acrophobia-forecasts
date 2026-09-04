@@ -19,8 +19,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
+      # mise-action exports its token after setup; step env authenticates cached self-updates.
       - uses: actions/checkout@v7
       - uses: jdx/mise-action@v4
+        env:
+          MISE_GITHUB_TOKEN: ${{ github.token }}
         with:
           minimum_release_age: 24h
       - run: mise run install
