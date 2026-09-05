@@ -1,0 +1,41 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: 09:00
+      timezone: America/Vancouver
+    open-pull-requests-limit: 2
+    cooldown:
+      default-days: 3
+      exclude:
+        - "@azohra/meteo.briefing"
+        - "@azohra/meteo.core"
+        - "@azohra/meteo.forecast"
+        - "@azohra/meteo.grib"
+        - "@azohra/meteo.j2k"
+        - "@azohra/meteo.station"
+    groups:
+      npm-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: 09:00
+      timezone: America/Vancouver
+    open-pull-requests-limit: 2
+    groups:
+      github-actions-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
