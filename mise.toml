@@ -23,6 +23,7 @@ idiomatic_version_file_enable_tools = ["pnpm"]
 # CI and local runs both resolve this toolchain; there is no setup-node or
 # corepack step anywhere. package.json is the pnpm version authority.
 node = "24"
+actionlint = "1.7.12"
 
 # Any task that writes to the dataset bucket: frozen install first, R2
 # credentials required by name. The default body is one model's
@@ -77,13 +78,14 @@ outputs = { auto = true }
 # ── repo verbs ──────────────────────────────────────────────────────────
 
 [tasks.check]
-description = "Lockfile agreement and the engine guard"
+description = "Lockfile, engine catalogue smoke test and workflow validation"
 run = """
 #!/usr/bin/env bash
 set -euo pipefail
 CI=true pnpm install --frozen-lockfile
 test -e node_modules/.bin/meteo || { echo "check: @azohra/meteo.forecast is not installed" >&2; exit 1; }
-echo "check: engine pinned and installed"
+node scripts/check-catalogue.mjs
+actionlint
 """
 
 [tasks.update-engine]

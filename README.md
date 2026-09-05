@@ -45,14 +45,10 @@ mise run build:data:gfs      # build and publish one model
 mise run build:data          # the full pass
 ```
 
-A credential-free smoke test that touches no bucket:
-
-```sh
-mise run install
-pnpm exec meteo forecast catalogue --output data/models.json
-```
-
-`data/` is generated output and is gitignored.
+Run `mise run check` before opening a PR. It verifies the frozen install, runs the pinned
+engine's catalogue command into a temporary directory, checks the exported JSON and model slugs,
+and lints the workflows. The catalogue smoke test needs no credentials and touches no bucket;
+engine forecasting tests belong in Meteo.
 
 ## Changing a launch site
 
