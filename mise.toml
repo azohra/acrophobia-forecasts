@@ -20,6 +20,7 @@ redactions = ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "METEO_S3_ENDPOINT"]
 idiomatic_version_file_enable_tools = ["pnpm"]
 
 [tools]
+"aqua:orhun/git-cliff" = "2.14.1"
 # CI and local runs both resolve this toolchain; there is no setup-node or
 # corepack step anywhere. package.json is the pnpm version authority.
 node = "24"
@@ -259,3 +260,12 @@ pinned=$(node -p "require('@azohra/meteo.forecast/package.json').version")
 extends = "forecast:publisher"
 description = "Publish the engine's model catalogue (models.json) to the dataset bucket"
 run = "pnpm exec meteo forecast publish --models"
+
+[tasks.changelog]
+description = "Render the changelog from main, unreleased changes included"
+run = 'CHANGELOG_REPOSITORY_URL="$(gh repo view --json url -q .url)" git cliff'
+
+[tasks.release]
+description = "Dispatch the Release workflow on main"
+usage = 'flag "--dry-run" help="Show the next version and notes without releasing"'
+run = 'gh workflow run release.yml --ref main -f "dry-run=${usage_dry_run:-false}"'
