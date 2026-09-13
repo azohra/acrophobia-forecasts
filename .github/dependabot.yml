@@ -1,6 +1,7 @@
 version: 2
 updates:
   - package-ecosystem: npm
+    labels: ["dependencies"]
     directory: /
     schedule:
       interval: weekly
@@ -29,6 +30,7 @@ updates:
       prefix-development: build
       include: scope
   - package-ecosystem: github-actions
+    labels: ["dependencies"]
     directory: /
     schedule:
       interval: weekly
