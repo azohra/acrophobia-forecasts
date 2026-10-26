@@ -9,21 +9,21 @@ importers:
   .:
     devDependencies:
       '@azohra/meteo.forecast':
-        specifier: 0.6.0
-        version: 0.6.0
+        specifier: 0.6.1
+        version: 0.6.1
 
 packages:
 
-  '@azohra/meteo.briefing@0.6.2':
-    resolution: {integrity: sha512-Oq7iYrqbU+AJchqOaNUPG9ui69vADSbw1ut2qGsU+CSgzEJXrCDmdx2dBYDrsmzd/9Jp4wDmLCFt+/0ADlUPIw==}
+  '@azohra/meteo.briefing@0.7.0':
+    resolution: {integrity: sha512-zqIQmLAzF5Bgq69cpH0SWLaLSI+eRfEbf24LchLbJ16liLJ9NRax3ybesDSfiHpjKml+sYuXGCgebAJtBAVjcw==}
     engines: {node: '>=22'}
 
-  '@azohra/meteo.core@0.3.0':
-    resolution: {integrity: sha512-FS1n6L9FRP+S2WUVbaQgC9xK64YlnWQjdkARn3IEsQ+QP+t3bI4EC1sk6NjmFxLs8Cs2GMDkSb0UKqBKirXivw==}
+  '@azohra/meteo.core@0.3.1':
+    resolution: {integrity: sha512-2xtRaeXslZ2IsvhTP22EUlxm1JDSlrS447ICxmOL2ehHsL7n4VHm7po368sxxHagXNIL/oj5Ubi/B5vksdLIVw==}
     engines: {node: '>=22'}
 
-  '@azohra/meteo.forecast@0.6.0':
-    resolution: {integrity: sha512-1I3iyq3Z70pAejLj6q4BrzJrEF8/qrX+OplKRAatvtlEG5j8CIBYMVqG6JxtdTc0l+ECntzc1ngQAMX5l21mlw==}
+  '@azohra/meteo.forecast@0.6.1':
+    resolution: {integrity: sha512-73qUUXo6MZn3GZ5OVM1qem4u6Ktf+dqN1uKWNcuwBr6jz2Y3uDnO5ecEhdz1tCeQkzAJp94nblm2rCfVnGFc7w==}
     engines: {node: '>=22'}
     hasBin: true
 
@@ -101,34 +101,34 @@ packages:
   xml-utils@1.10.2:
     resolution: {integrity: sha512-RqM+2o1RYs6T8+3DzDSoTRAUfrvaejbVHcp3+thnAtDKo8LskR+HomLajEy5UjTz24rpka7AxVBRR3g2wTUkJA==}
 
-  zod@4.4.3:
-    resolution: {integrity: sha512-ytENFjIJFl2UwYglde2jchW2Hwm4GJFLDiSXWdTrJQBIN9Fcyp7n4DhxJEiWNAJMV1/BqWfW/kkg71UDcHJyTQ==}
+  zod@4.6.7:
+    resolution: {integrity: sha512-g8W2D2kU6a8untc053fX1uVBKzM7yqAxW/3zwk83+6RyF2+SKOuV+c0wBDhUwzV1PaGapmZH+rmcUzPf+3CGwg==}
 
   zstddec@0.2.0:
     resolution: {integrity: sha512-oyPnDa1X5c13+Y7mA/FDMNJrn4S8UNBe0KCqtDmor40Re7ALrPN6npFwyYVRRh+PqozZQdeg23QtbcamZnG5rA==}
 
 snapshots:
 
-  '@azohra/meteo.briefing@0.6.2':
+  '@azohra/meteo.briefing@0.7.0':
     dependencies:
-      '@azohra/meteo.core': 0.3.0
-      zod: 4.4.3
+      '@azohra/meteo.core': 0.3.1
+      zod: 4.6.7
 
-  '@azohra/meteo.core@0.3.0':
+  '@azohra/meteo.core@0.3.1':
     dependencies:
-      zod: 4.4.3
+      zod: 4.6.7
 
-  '@azohra/meteo.forecast@0.6.0':
+  '@azohra/meteo.forecast@0.6.1':
     dependencies:
-      '@azohra/meteo.briefing': 0.6.2
-      '@azohra/meteo.core': 0.3.0
+      '@azohra/meteo.briefing': 0.7.0
+      '@azohra/meteo.core': 0.3.1
       '@azohra/meteo.grib': 0.1.4
       ajv: 8.20.0
       aws4fetch: 1.0.20
       geotiff: 3.0.5
       h5wasm: 0.10.3
       proj4: 2.21.0(geotiff@3.0.5)
-      zod: 4.4.3
+      zod: 4.6.7
 
   '@azohra/meteo.grib@0.1.4':
     dependencies:
@@ -194,6 +194,6 @@ snapshots:
 
   xml-utils@1.10.2: {}
 
-  zod@4.4.3: {}
+  zod@4.6.7: {}
 
   zstddec@0.2.0: {}
