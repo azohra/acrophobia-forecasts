@@ -17,6 +17,8 @@ min_version = { soft = "2026.8.10" }
 redactions = ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "METEO_S3_ENDPOINT"]
 
 [settings]
+# Required for the dependency provider.
+experimental = true
 idiomatic_version_file_enable_tools = ["pnpm"]
 
 [tools]
@@ -25,16 +27,15 @@ idiomatic_version_file_enable_tools = ["pnpm"]
 node = "24"
 actionlint = "1.7.12"
 
-# Any task that writes to the dataset bucket: frozen install first, R2
-# credentials required by name. The default body is one model's
-# build-then-publish pair; the terrain and catalogue tasks override it.
+# Any task that writes to the dataset bucket: R2 credentials required by
+# name. The default body is one model's build-then-publish pair; the terrain
+# and catalogue tasks override it.
 #
 # Build failures downgrade to a warning so one provider outage can't block
 # the models after it, but publish still runs so a completed build is never
 # stranded. The ::warning:: prefix becomes an annotation when this runs in
 # GitHub Actions and is harmless anywhere else.
 [task_templates."forecast:publisher"]
-depends = ["install"]
 usage = '''
 flag "--access-key-id <id>" env="AWS_ACCESS_KEY_ID" required=#true help="R2 access key id (pass via env, never on the command line)"
 flag "--secret-access-key <key>" env="AWS_SECRET_ACCESS_KEY" required=#true help="R2 secret access key (pass via env, never on the command line)"
@@ -63,27 +64,27 @@ value   R2_ENDPOINT
 CONTRACT
 """
 
-[tasks.install]
-description = "Frozen install; refuses to proceed without the pinned engine"
 # The engine is the published @azohra/meteo.forecast npm package, pinned in
 # package.json. The guard refuses to fall back to an unrelated registry
 # package named "meteo" (see README.md).
-run = [
-  "pnpm install --frozen-lockfile",
-  'test -e node_modules/.bin/meteo || { echo "install: @azohra/meteo.forecast is not installed — refusing to fall back to an unrelated registry package named meteo (README.md)" >&2; exit 1; }',
-]
+[deps.pnpm]
+auto = true
 sources = ["package.json", "pnpm-lock.yaml"]
-outputs = { auto = true }
+outputs = ["node_modules"]
+run = 'pnpm install --frozen-lockfile && { test -e node_modules/.bin/meteo || { echo "install: @azohra/meteo.forecast is not installed — refusing to fall back to an unrelated registry package named meteo (README.md)" >&2; exit 1; }; }'
 
 # ── repo verbs ──────────────────────────────────────────────────────────
 
+[tasks."check:tasks"]
+description = "Every task definition is valid"
+run = "mise tasks validate"
+
 [tasks.check]
 description = "Lockfile, engine catalogue smoke test and workflow validation"
+depends = ["check:tasks"]
 run = """
 #!/usr/bin/env bash
 set -euo pipefail
-CI=true pnpm install --frozen-lockfile
-test -e node_modules/.bin/meteo || { echo "check: @azohra/meteo.forecast is not installed" >&2; exit 1; }
 node scripts/check-catalogue.mjs
 actionlint
 """
