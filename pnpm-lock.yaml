@@ -9,30 +9,30 @@ importers:
   .:
     devDependencies:
       '@azohra/meteo.forecast':
-        specifier: 0.6.2
-        version: 0.6.2
+        specifier: 0.6.3
+        version: 0.6.3
 
 packages:
 
-  '@azohra/meteo.briefing@0.7.0':
-    resolution: {integrity: sha512-zqIQmLAzF5Bgq69cpH0SWLaLSI+eRfEbf24LchLbJ16liLJ9NRax3ybesDSfiHpjKml+sYuXGCgebAJtBAVjcw==}
+  '@azohra/meteo.briefing@0.7.1':
+    resolution: {integrity: sha512-0S5BOTdbyj+sBWL6TetiqCM3OGILv7U/eMr20ypRBw/aBTl/9tt9uoBrLv9BVq83jTFpDCxW3wwev1DsYaMaTw==}
     engines: {node: '>=22'}
 
-  '@azohra/meteo.core@0.3.1':
-    resolution: {integrity: sha512-2xtRaeXslZ2IsvhTP22EUlxm1JDSlrS447ICxmOL2ehHsL7n4VHm7po368sxxHagXNIL/oj5Ubi/B5vksdLIVw==}
+  '@azohra/meteo.core@0.3.2':
+    resolution: {integrity: sha512-oNsSFFwOHpq1ULMS2JiesMIWZDSyecsSMXViOm+Fb3AcQn2/eYnuadzJk3wfO50eNzfnR4eR5phq7SU69RiI3g==}
     engines: {node: '>=22'}
 
-  '@azohra/meteo.forecast@0.6.2':
-    resolution: {integrity: sha512-UoSa3tiBb6N2Vp2S5GYPGVKlitkgRHtitBhoGhBDHebz0O5cYcKZCyE/tqZY0ZwsAC0IVeN25UgjxGdcafQFbg==}
+  '@azohra/meteo.forecast@0.6.3':
+    resolution: {integrity: sha512-qukxef1vK+m3jryeYH9QjDdRagPlscmNZN6lOUalLfJYnxEtBTgUKyav4P9zcYLv1bt+XzUqjnkD3N+DJ4Z9Sw==}
     engines: {node: '>=22'}
     hasBin: true
 
-  '@azohra/meteo.grib@0.1.4':
-    resolution: {integrity: sha512-fNGJwFfoAPIAGw8pkCksYttCe5606xLnB6eT50XaD+M3dBIM3MOYiGqL+0wHj9uOCs3dOex3Qws4uBCitqTyQw==}
+  '@azohra/meteo.grib@0.1.5':
+    resolution: {integrity: sha512-NAslOcwCEk4kCAsTUPRILP0Fy8Sdeiln80WHQT8BeQLq+0WsKBFZ3YQ6lFlUpiWYh2tuH0YVKFiV3VQcPVD1iQ==}
     engines: {node: '>=22'}
 
-  '@azohra/meteo.j2k@0.2.0':
-    resolution: {integrity: sha512-iaQ22wPRgri5/VdZrHfSvEwRveznWozKHq8Ts7cy/zzkWZr9AMbhIeI8OlHKZtsaZV3F2VJlgP6zXj95b+nQog==}
+  '@azohra/meteo.j2k@0.2.1':
+    resolution: {integrity: sha512-tDCARDIPrTLBYWCIgarogaveuX/ZxVaMstdlfRKc/QnMMUAUOR7ticS1cmUU0cxhOXHlycaWC1zcfE8gWLBFWA==}
     engines: {node: '>=22'}
 
   '@cornerstonejs/codec-openjpeg@1.3.1':
@@ -109,20 +109,20 @@ packages:
 
 snapshots:
 
-  '@azohra/meteo.briefing@0.7.0':
+  '@azohra/meteo.briefing@0.7.1':
     dependencies:
-      '@azohra/meteo.core': 0.3.1
+      '@azohra/meteo.core': 0.3.2
       zod: 4.6.7
 
-  '@azohra/meteo.core@0.3.1':
+  '@azohra/meteo.core@0.3.2':
     dependencies:
       zod: 4.6.7
 
-  '@azohra/meteo.forecast@0.6.2':
+  '@azohra/meteo.forecast@0.6.3':
     dependencies:
-      '@azohra/meteo.briefing': 0.7.0
-      '@azohra/meteo.core': 0.3.1
-      '@azohra/meteo.grib': 0.1.4
+      '@azohra/meteo.briefing': 0.7.1
+      '@azohra/meteo.core': 0.3.2
+      '@azohra/meteo.grib': 0.1.5
       ajv: 8.20.0
       aws4fetch: 1.0.20
       geotiff: 3.0.5
@@ -130,12 +130,12 @@ snapshots:
       proj4: 2.21.0(geotiff@3.0.5)
       zod: 4.6.7
 
-  '@azohra/meteo.grib@0.1.4':
+  '@azohra/meteo.grib@0.1.5':
     dependencies:
-      '@azohra/meteo.j2k': 0.2.0
+      '@azohra/meteo.j2k': 0.2.1
       '@cornerstonejs/codec-openjpeg': 1.3.1
 
-  '@azohra/meteo.j2k@0.2.0': {}
+  '@azohra/meteo.j2k@0.2.1': {}
 
   '@cornerstonejs/codec-openjpeg@1.3.1': {}
 
